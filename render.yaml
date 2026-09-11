@@ -1,0 +1,31 @@
+services:
+  - type: web
+    name: vantix
+    runtime: python
+    plan: free
+    buildCommand: python3 -m compileall -q .
+    startCommand: python3 server.py
+    healthCheckPath: /api/health
+    envVars:
+      - key: HOST
+        value: 0.0.0.0
+      - key: VANTIX_ENV
+        value: production
+      - key: VANTIX_PUBLIC_URL
+        sync: false
+      - key: LIBSQL_URL
+        sync: false
+      - key: LIBSQL_AUTH_TOKEN
+        sync: false
+      - key: BREVO_API_KEY
+        sync: false
+      - key: MAIL_FROM
+        sync: false
+      - key: SUPPORT_EMAIL
+        sync: false
+      - key: ADMIN_EMAILS
+        sync: false
+      - key: SEC_USER_AGENT
+        sync: false
+      - key: FREE_ACCOUNTS_CONFIRMED
+        sync: false
