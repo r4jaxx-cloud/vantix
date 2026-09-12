@@ -8,6 +8,29 @@ class FreeDataTests(unittest.TestCase):
  def test_crypto_observation_time_and_quote(self):
   with patch.object(d,'fetch',return_value=json.dumps([{'symbol':'BTCUSDT','lastPrice':'60000','priceChangePercent':'2','quoteVolume':'1000','closeTime':1700000000000}]).encode()):
    result=d.crypto();self.assertEqual(result['data'][0]['quote'],'USDT');self.assertTrue(result['data'][0]['updated'].startswith('2023-'));self.assertEqual(result['status'],'SNAPSHOT')
+ def test_kraken_missing_time_and_change_stay_unknown(self):
+  payload={'error':[],'result':{'XBTUSDT':{'c':['60000','1'],'v':['2','3'],'p':['59000','58000'],'o':'57000'}}}
+  with patch.object(d,'fetch',return_value=json.dumps(payload).encode()):
+   result=d.kraken_crypto();row=result['data'][0]
+   self.assertEqual(row['symbol'],'BTC');self.assertEqual(row['quote'],'USDT')
+   self.assertIsNone(row['updated']);self.assertIsNone(row['change'])
+   self.assertEqual(row['volume'],174000);self.assertIsNotNone(result['retrieved_at'])
+ def test_one_exchange_failure_preserves_other_exchange(self):
+  def provider(url):
+   if 'kraken.com' in url:return b'{"error":[],"result":{"XBTUSDT":{"c":["60000","1"],"v":["2","3"],"p":["59000","58000"]}}}'
+   if 'binance' in url:raise OSError('offline')
+   return b'[]'
+  with patch.object(d,'fetch',side_effect=provider):
+   result=d.market();self.assertEqual(len(result['data']),1)
+   self.assertEqual(result['data'][0]['source'],'Kraken')
+   self.assertEqual(result['sources'][0]['status'],'UNAVAILABLE')
+ def test_kraken_failure_retains_stale_without_inventing_timestamp(self):
+  with patch.object(d,'fetch',return_value=b'{"error":[],"result":{"XBTUSDT":{"c":["60000","1"],"v":["2","3"],"p":["59000","58000"]}}}'):
+   first=d.kraken_crypto()
+  d.CACHE['crypto-kraken']['_checked']-=16
+  with patch.object(d,'fetch',return_value=b'{"error":["EGeneral:Unavailable"]}'):
+   result=d.kraken_crypto();self.assertEqual(result['status'],'STALE')
+   self.assertEqual(result['retrieved_at'],first['retrieved_at']);self.assertIsNone(result['data'][0]['updated'])
  def test_fx_is_reference_not_live(self):
   with patch.object(d,'fetch',return_value=b'[{"base":"USD","quote":"GBP","rate":0.75,"date":"2025-01-02"}]'):
    row=d.forex()['data'][0];self.assertEqual(row['status'],'REFERENCE');self.assertEqual(row['updated'],'2025-01-02')

@@ -5,6 +5,7 @@ from urllib.parse import urlencode, quote, urlparse
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 import socket,ssl
+from concurrent.futures import ThreadPoolExecutor
 from xml.etree import ElementTree as ET
 from email.utils import parsedate_to_datetime
 
@@ -76,7 +77,32 @@ def crypto():
         raw=json.loads(fetch(url))
         if not isinstance(raw,list):raise ValueError('Expected ticker list')
         return [{'symbol':x['symbol'][:-4],'price':number(x['lastPrice']),'change':number(x['priceChangePercent']),'volume':number(x['quoteVolume']),'quote':'USDT','source':'Binance','source_url':'https://www.binance.com/en/trade/'+x['symbol'][:-4]+'_USDT','status':'SNAPSHOT','updated':datetime.fromtimestamp(number(x['closeTime'])/1000,timezone.utc).isoformat()} for x in raw if x.get('symbol') in ('BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','DOGEUSDT','XRPUSDT','ADAUSDT')]
-    return cached('crypto','Binance',url,parse,60,'SNAPSHOT')
+    return cached('crypto','Binance',url,parse,15,'SNAPSHOT')
+
+def kraken_crypto():
+    # Kraken ticker has no observation timestamp or rolling-24h opening price.
+    # Do not substitute retrieval time or today's open for those missing fields.
+    pairs={'XBTUSDT':'BTC','ETHUSDT':'ETH','SOLUSDT':'SOL',
+           'XDGUSDT':'DOGE','XRPUSDT':'XRP','ADAUSDT':'ADA'}
+    url='https://api.kraken.com/0/public/Ticker?'+urlencode({'pair':','.join(pairs)})
+    def parse():
+        raw=json.loads(fetch(url))
+        if not isinstance(raw,dict) or raw.get('error') or not isinstance(raw.get('result'),dict):
+            raise ValueError('Unexpected Kraken ticker response')
+        rows=[]
+        for pair,x in raw['result'].items():
+            symbol=pairs.get(pair)
+            if not symbol:continue
+            price=number(x['c'][0])
+            if price<=0:raise ValueError('Invalid price')
+            rows.append({'symbol':symbol,'price':price,'change':None,
+                         'volume':number(x['v'][1])*number(x['p'][1]),
+                         'quote':'USDT','source':'Kraken',
+                         'source_url':'https://pro.kraken.com/app/trade/'+symbol.lower()+'-usdt',
+                         'status':'SNAPSHOT','updated':None})
+        return rows
+    return cached('crypto-kraken','Kraken',url,parse,15,'SNAPSHOT')
+
 
 def forex():
     url='https://api.frankfurter.dev/v2/rates?base=USD&quotes=GBP,EUR,JPY,CHF,CAD,AUD&providers=ecb'
@@ -127,10 +153,15 @@ def filings(cik):
     return cached('filings'+cik,'SEC EDGAR',url,parse,600,'FILED')
 
 def market():
-    a=crypto();b=forex();rows=[]
-    for result in (a,b):
-        for row in result['data']:rows.append({**row,'status':'STALE' if result['status']=='STALE' else row['status'],'retrieved_at':result['retrieved_at']})
-    return {'data':rows,'sources':[a,b],'checked_at':stamp()}
+    # Fetch independently so an unavailable exchange cannot suppress another.
+    with ThreadPoolExecutor(max_workers=3) as pool:
+        results=list(pool.map(lambda loader:loader(),(crypto,kraken_crypto,forex)))
+    rows=[]
+    for result in results:
+        for row in result['data']:
+            rows.append({**row,'status':'STALE' if result['status']=='STALE' else row['status'],
+                         'retrieved_at':result['retrieved_at']})
+    return {'data':rows,'sources':results,'checked_at':stamp()}
 
 def news(topic='all'):
     keys=['policy','energy','world'] if topic=='all' else [topic]

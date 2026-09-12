@@ -19,4 +19,13 @@ check('quotes no longer imply USD for USDT',()=>assert(!vm.runInContext('money(1
 check('AI response identifies source search',()=>{node('q').value='inflation';vm.runInContext('searchSources()',ctx);assert(node('chat').innerHTML.includes('Source search · no AI interpretation'))});
 check('watchlist markup has no injected dynamic script',()=>{ctx.location.pathname='/watchlist';vm.runInContext('render()',ctx);assert(!node('page').innerHTML.includes("removeWatch('"));assert(node('page').innerHTML.includes('savedRows'))});
 for(const route of ['/','/ask','/markets','/crypto','/stocks','/forex','/commodities','/economy','/news','/feed','/radar','/shield','/watchlist','/alerts','/research','/copilot','/sectors','/portfolio','/account','/admin','/reset-password','/privacy','/terms']){check('render logic '+route,()=>{ctx.location.pathname=route;node('countrySelect').value='GBR';vm.runInContext('render()',ctx);assert(node('page').innerHTML.includes('<h1>'))})}
+check('crypto quotes refresh without clearing token input',()=>{
+ ctx.location.pathname='/crypto';vm.runInContext('render()',ctx);
+ node('pairToken').value='keep-this-address';
+ vm.runInContext("marketData=[{symbol:'BTC',price:123,quote:'USDT',source:'Kraken',status:'SNAPSHOT',updated:null,retrieved_at:'2026-09-12'}];refreshMarketPanels()",ctx);
+ assert(node('cryptoQuotes').innerHTML.includes('123'));
+ assert(node('cryptoQuotes').innerHTML.includes('Observation time unavailable'));
+ assert(node('cryptoQuotes').innerHTML.includes('24h change unavailable'));
+ assert.equal(node('pairToken').value,'keep-this-address');
+});
 console.log(count+' interface-logic checks passed (no browser rendering).');
