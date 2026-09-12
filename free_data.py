@@ -3,6 +3,8 @@ import json, os, re, time, threading, math
 from datetime import datetime, timezone
 from urllib.parse import urlencode, quote, urlparse
 from urllib.request import Request, urlopen
+from urllib.error import HTTPError, URLError
+import socket,ssl
 from xml.etree import ElementTree as ET
 from email.utils import parsedate_to_datetime
 
@@ -33,6 +35,19 @@ def fetch(url):
     if len(raw)>5_000_000:raise ValueError('Response too large')
     return raw
 
+def failure_details(exc):
+    # Fixed messages only: never return raw response bodies or exception URLs.
+    if isinstance(exc,HTTPError):
+        code='HTTP_'+str(exc.code)
+        explanation={401:'Provider requires authentication.',403:'Provider denied the request.',404:'Provider endpoint was not found.',429:'Provider rate limit reached.',451:'Provider reports a legal or regional restriction.'}.get(exc.code,'Provider returned an HTTP error.')
+        return code,explanation
+    reason=exc.reason if isinstance(exc,URLError) else exc
+    if isinstance(reason,(TimeoutError,socket.timeout)):return 'TIMEOUT','Provider did not respond before the timeout.'
+    if isinstance(reason,ssl.SSLError):return 'TLS_ERROR','Secure connection to the provider failed.'
+    if isinstance(exc,(json.JSONDecodeError,ET.ParseError,UnicodeError)):return 'INVALID_RESPONSE','Provider returned an unreadable response.'
+    if isinstance(exc,(ValueError,KeyError,TypeError)):return 'INVALID_DATA','Provider returned unexpected data.'
+    return 'CONNECTION_ERROR','Provider connection failed.'
+
 def cached(key,source,url,loader,ttl=300,cadence='PERIODIC'):
     with LOCK:
         old=CACHE.get(key)
@@ -44,9 +59,10 @@ def cached(key,source,url,loader,ttl=300,cadence='PERIODIC'):
     try:
         rows=loader()
         if not isinstance(rows,list):raise ValueError('Unexpected provider payload')
-        result={'data':rows,'source':source,'source_url':url,'status':cadence if rows else 'EMPTY','checked_at':checked,'retrieved_at':checked,'message':None}
+        result={'data':rows,'source':source,'source_url':url,'status':cadence if rows else 'EMPTY','checked_at':checked,'retrieved_at':checked,'message':None,'error_code':None}
     except Exception as e:
-        result={'data':old['data'] if old else [],'source':source,'source_url':url,'status':'STALE' if old and old['data'] else 'UNAVAILABLE','checked_at':checked,'retrieved_at':old.get('retrieved_at') if old else None,'message':'Source could not be refreshed. '+('Last successful data retained.' if old and old['data'] else 'No observations available.')}
+        error_code,detail=failure_details(e)
+        result={'data':old['data'] if old else [],'source':source,'source_url':url,'status':'STALE' if old and old['data'] else 'UNAVAILABLE','checked_at':checked,'retrieved_at':old.get('retrieved_at') if old else None,'error_code':error_code,'message':detail+' '+('Last successful data retained.' if old and old['data'] else 'No observations available.')}
         if isinstance(e,ValueError) and str(e).startswith('SEC requires'):result['message']=str(e)
     with LOCK:
         INFLIGHT.discard(key)
@@ -55,7 +71,7 @@ def cached(key,source,url,loader,ttl=300,cadence='PERIODIC'):
     return {k:v for k,v in result.items() if not k.startswith('_')}
 
 def crypto():
-    url='https://api.binance.com/api/v3/ticker/24hr?'+urlencode({'symbols':json.dumps(['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','DOGEUSDT','XRPUSDT','ADAUSDT'],separators=(',',':'))})
+    url='https://data-api.binance.vision/api/v3/ticker/24hr?'+urlencode({'symbols':json.dumps(['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','DOGEUSDT','XRPUSDT','ADAUSDT'],separators=(',',':'))})
     def parse():
         raw=json.loads(fetch(url))
         if not isinstance(raw,list):raise ValueError('Expected ticker list')
