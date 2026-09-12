@@ -70,13 +70,47 @@ def cached(key,source,url,loader,ttl=300,cadence='PERIODIC'):
         if len(CACHE)>150:CACHE.pop(next(iter(CACHE)))
     return {k:v for k,v in result.items() if not k.startswith('_')}
 
-def crypto():
+def binance_crypto():
     url='https://data-api.binance.vision/api/v3/ticker/24hr?'+urlencode({'symbols':json.dumps(['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','DOGEUSDT','XRPUSDT','ADAUSDT'],separators=(',',':'))})
     def parse():
         raw=json.loads(fetch(url))
         if not isinstance(raw,list):raise ValueError('Expected ticker list')
         return [{'symbol':x['symbol'][:-4],'price':number(x['lastPrice']),'change':number(x['priceChangePercent']),'volume':number(x['quoteVolume']),'quote':'USDT','source':'Binance','source_url':'https://www.binance.com/en/trade/'+x['symbol'][:-4]+'_USDT','status':'SNAPSHOT','updated':datetime.fromtimestamp(number(x['closeTime'])/1000,timezone.utc).isoformat()} for x in raw if x.get('symbol') in ('BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','DOGEUSDT','XRPUSDT','ADAUSDT')]
-    return cached('crypto','Binance',url,parse,60,'SNAPSHOT')
+    return cached('crypto-binance','Binance',url,parse,60,'SNAPSHOT')
+
+TRACKED_CRYPTO=('BTC','ETH','BNB','SOL','DOGE','XRP','ADA')
+
+def bybit_crypto():
+    url='https://api.bybit.com/v5/market/tickers?category=spot'
+    def parse():
+        raw=json.loads(fetch(url))
+        if not isinstance(raw,dict) or raw.get('retCode')!=0 or raw.get('result',{}).get('category')!='spot':raise ValueError('Invalid spot response')
+        updated=datetime.fromtimestamp(number(raw['time'])/1000,timezone.utc).isoformat()
+        rows=[]
+        for x in raw['result']['list']:
+            symbol=x.get('symbol','')
+            if symbol not in [s+'USDT' for s in TRACKED_CRYPTO]:continue
+            price=number(x['lastPrice']);volume=number(x['turnover24h'])
+            if price<=0 or volume<0:continue
+            rows.append({'symbol':symbol[:-4],'price':price,'change':number(x['price24hPcnt'])*100,'volume':volume,'quote':'USDT','source':'Bybit','source_url':'https://www.bybit.com/en/trade/spot/'+symbol[:-4]+'/USDT','status':'SNAPSHOT','updated':updated,'timestamp_kind':'Provider response time'})
+        return rows
+    return cached('crypto-bybit','Bybit',url,parse,60,'SNAPSHOT')
+
+def crypto():
+    # Two independently cached public spot feeds. Prefer fresh observations to stale ones.
+    sources=[binance_crypto(),bybit_crypto()];rows=[]
+    for symbol in TRACKED_CRYPTO:
+        options=[]
+        for source in sources:
+            for row in source['data']:
+                if row['symbol']==symbol:
+                    candidate={**row,'retrieved_at':source['retrieved_at'],'status':'STALE' if source['status'] in ('STALE','REFRESHING') else row['status']}
+                    options.append(candidate)
+        choice=next((r for r in options if r['status']=='SNAPSHOT'),options[0] if options else None)
+        if choice:rows.append(choice)
+    result={'data':rows,'sources':sources,'source':'Crypto providers','source_url':None,'checked_at':stamp(),'retrieved_at':max((x['retrieved_at'] for x in sources if x.get('retrieved_at')),default=None),'status':'SNAPSHOT' if rows and any(r['status']=='SNAPSHOT' for r in rows) else 'STALE' if rows else 'UNAVAILABLE'}
+    with LOCK:CACHE['crypto']={**result,'_checked':time.monotonic()}
+    return result
 
 def forex():
     url='https://api.frankfurter.dev/v2/rates?base=USD&quotes=GBP,EUR,JPY,CHF,CAD,AUD&providers=ecb'
@@ -130,7 +164,7 @@ def market():
     a=crypto();b=forex();rows=[]
     for result in (a,b):
         for row in result['data']:rows.append({**row,'status':'STALE' if result['status']=='STALE' else row['status'],'retrieved_at':result['retrieved_at']})
-    return {'data':rows,'sources':[a,b],'checked_at':stamp()}
+    return {'data':rows,'sources':a.get('sources',[a])+[b],'checked_at':stamp()}
 
 def news(topic='all'):
     keys=['policy','energy','world'] if topic=='all' else [topic]
