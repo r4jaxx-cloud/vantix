@@ -15,7 +15,7 @@ Open http://localhost:8000. Local account registration returns a test verificati
 ## Implemented
 
 - 23 page routes, with public-source context panels throughout.
-- Public adapters: Binance crypto snapshots; ECB daily FX via Frankfurter; Federal Reserve and EIA releases; USGS earthquake reports; annual World Bank indicators; SEC filings by CIK with owner contact configured.
+- Public adapters: Binance and Kraken crypto snapshots (15-second cache and visible-tab polling); ECB daily FX via Frankfurter; Federal Reserve and EIA releases; USGS earthquake reports; annual World Bank indicators; SEC filings by CIK with owner contact configured.
 - No fabricated numbers or headlines when providers fail. Missing token-security evidence remains UNKNOWN. GoPlus now returns individual provider flags for Ethereum and BNB Chain; it never produces a SAFE verdict. DEX Screener pair lookups cover BNB Chain, Ethereum and Solana. GDELT adds indexed publisher headline links, with indexing time explicitly separate from publication time. Equity prices, complete global news coverage, external social streams and background alert delivery are not implemented.
 - Email verification, cookie sessions, password reset/resend and display names.
 - Account-scoped watchlist, portfolio quantities and price thresholds. Threshold notifications are evaluated while the alerts page is open against fresh tracked crypto snapshots; they are not an always-on monitoring service.
@@ -82,3 +82,9 @@ Additional official source documentation:
 - https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/
 
 New integrations are fixture-tested, not live-validated. A provider requiring authentication or denying a request remains unavailable; no paid subscription or credentials are obtained automatically.
+
+### Multiple crypto sources
+
+The Crypto page shows separate Binance and Kraken USDT quotes with per-provider health and retrieval times. A provider failure retains only that provider's previous observations as STALE. Kraken's ticker omits a trade timestamp and rolling 24-hour opening price, so observation time and 24-hour change remain unavailable. This is polling, not a tick-by-tick live stream. BNB coverage remains Binance-only. Existing alerts continue using timestamped Binance observations.
+
+Adapter reference: https://docs.kraken.com/api-reference/market-data/get-ticker-information
