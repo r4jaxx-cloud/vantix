@@ -6,7 +6,7 @@ spec=importlib.util.spec_from_file_location('app',str(pathlib.Path(__file__).wit
 tmp=tempfile.TemporaryDirectory(); m.DB=pathlib.Path(tmp.name)/'test.db';m.db().close()
 server=m.ThreadingHTTPServer(('127.0.0.1',0),m.H);threading.Thread(target=server.serve_forever,daemon=True).start(); base='http://127.0.0.1:'+str(server.server_port)
 def call(path,body=None,token=None):
- req=urllib.request.Request(base+path,data=json.dumps(body).encode() if body is not None else None,headers={'Content-Type':'application/json',**({'Authorization':'Bearer '+token} if token else {})})
+ req=urllib.request.Request(base+path,data=json.dumps(body).encode() if body is not None else None,headers={'Content-Type':'application/json',**({'Cookie':'vantix_session='+token} if token else {})})
  try:r=urllib.request.urlopen(req)
  except urllib.error.HTTPError as e:r=e
  raw=r.read();return r.status,json.loads(raw) if 'application/json' in r.headers.get('Content-Type','') else raw.decode()
@@ -52,3 +52,4 @@ try:
  print(json.dumps({'passed':len(checks),'checks':checks},indent=2))
  pathlib.Path(__file__).with_name('VALIDATION.json').write_text(json.dumps({'passed':len(checks),'checks':checks,'limits':['No browser visual QA performed','Real provider connectivity not validated','Remote database adapter tested separately; live connection not validated','Not ready for public deployment']},indent=2))
 finally:server.shutdown();server.server_close();tmp.cleanup()
+

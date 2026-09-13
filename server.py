@@ -1,6 +1,8 @@
+import security,base64
+from security import hashpw,checkpw
 import free_data, storage, launch_features, mail_service, ai_service, operations, owner_reports
 from http.cookies import SimpleCookie
-import json, os, re, threading, time, urllib.request, urllib.parse, urllib.error, xml.etree.ElementTree as ET, sqlite3, hashlib, hmac, secrets, smtplib
+import json, os, re, threading, time, urllib.request, urllib.parse, urllib.error, sqlite3, hashlib, hmac, secrets, smtplib
 from email.message import EmailMessage
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 from pathlib import Path
@@ -12,6 +14,7 @@ AUTH_LIMITS={}
 AUTH_LOCK=threading.Lock()
 PUBLIC_ROUTES={'/','/ask','/markets','/crypto','/stocks','/forex','/commodities','/economy','/news','/feed','/radar','/shield','/watchlist','/alerts','/research','/copilot','/sectors','/portfolio','/account','/admin','/reset-password','/privacy','/terms'}
 def auth_allowed(ip):
+    ip=security.private_id(ip)
     with AUTH_LOCK:
         tick=time.monotonic()
         old=[x for x in AUTH_LIMITS.get(ip,[]) if tick-x<60]
@@ -34,23 +37,15 @@ def db():
     if time.monotonic()-MAINT_LAST>3600 and MAINT_LOCK.acquire(blocking=False):
         try:
             cutoff=iso(now()-timedelta(days=30));current=iso(now())
-            for table in ('events','notifications'):c.execute('DELETE FROM '+table+' WHERE created_at<?',(cutoff,))
-            for table in ('sessions','verify_tokens','reset_tokens'):c.execute('DELETE FROM '+table+' WHERE expires_at<?',(current,))
-            c.execute('DELETE FROM limits WHERE period<?',(cutoff[:10],));c.commit();MAINT_LAST=time.monotonic()
+            for sql in ('DELETE FROM events WHERE created_at<?','DELETE FROM notifications WHERE created_at<?'):c.execute(sql,(cutoff,))
+            for sql in ('DELETE FROM sessions WHERE expires_at<?','DELETE FROM verify_tokens WHERE expires_at<?','DELETE FROM reset_tokens WHERE expires_at<?'):c.execute(sql,(current,))
+            c.execute('DELETE FROM security_audit WHERE created_at<?',(cutoff,));c.execute('DELETE FROM limits WHERE period<?',(cutoff[:10],));c.commit();MAINT_LAST=time.monotonic()
         finally:MAINT_LOCK.release()
     return c
 
 
 def now(): return datetime.now(timezone.utc)
 def iso(d): return d.isoformat()
-def hashpw(p,s=None):
-    s=s or secrets.token_hex(16)
-    return 'pbkdf2:600000:'+s+':'+hashlib.pbkdf2_hmac('sha256',p.encode(),s.encode(),600000).hex()
-def checkpw(p,h):
-    try:
-        algo, rounds, salt, expected=h.split(':')
-        return algo=='pbkdf2' and hmac.compare_digest(hashlib.pbkdf2_hmac('sha256',p.encode(),salt.encode(),int(rounds)).hex(),expected)
-    except (ValueError,TypeError): return False
 
 def fetch(url, timeout=10, headers=None):
     h={'User-Agent':'VANTIX/1.0'}; h.update(headers or {})
@@ -66,6 +61,23 @@ def send_verification(email, token):
     link=host+'/api/auth/verify?token='+urllib.parse.quote(token)
     sent=mail_service.send(email,'Verify your VANTIX account','Open this link to verify your email within 24 hours:\n'+link)
     return sent,None if sent else link
+
+
+def email_action(path,email,password=''):
+    c=db()
+    try:
+        security.audit(c,'email_request')
+        if path!='/api/auth/register':
+            launch_features.post(None,path,{'email':email},c,None,hashpw);return
+        hashed=hashpw(password)
+        try:
+            cur=c.execute('INSERT INTO users(email,password_hash,created_at) VALUES(?,?,?)',(email,hashed,iso(now())))
+            uid=cur.lastrowid;tok=secrets.token_urlsafe(32)
+            c.execute('INSERT INTO verify_tokens(token,user_id,expires_at) VALUES(?,?,?)',(token_hash(tok),uid,iso(now()+timedelta(hours=24))));c.commit()
+            security.audit(c,'registration',uid)
+        except sqlite3.IntegrityError:c.rollback();return
+        send_verification(email,tok)
+    finally:c.close();storage.cleanup()
 
 def request_token(h):
     try:
@@ -84,6 +96,7 @@ def json_body(h):
     if n<0 or n>16384: raise ValueError('Request too large')
     value=json.loads(h.rfile.read(n) or '{}')
     if not isinstance(value,dict): raise ValueError('Expected object')
+    security.validate_body(value)
     return value
 
 class H(BaseHTTPRequestHandler):
@@ -91,7 +104,12 @@ class H(BaseHTTPRequestHandler):
         super().setup(); self.connection.settimeout(50)
     def log_message(self,*args): pass
     def send(self,code,body,ctype='application/json'):
+        if ctype.startswith('text/html'):
+            scripts=re.findall(r'<script>([\s\S]*?)</script>',body)
+            hashes=' '.join("'sha256-"+base64.b64encode(hashlib.sha256(x.encode()).digest()).decode()+"'" for x in scripts)
+            self.csp="default-src 'self'; script-src "+hashes+" https://s3.tradingview.com; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.tradingview.com; connect-src 'self' wss://data-stream.binance.vision wss://stream.bybit.com; frame-src https://*.tradingview.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         b=body.encode(); self.send_response(code); self.send_header('Content-Type',ctype); self.send_header('Content-Length',str(len(b))); self.send_header('Cache-Control','no-store'); self.send_header('X-Content-Type-Options','nosniff'); self.send_header('X-Frame-Options','DENY'); self.send_header('Referrer-Policy','no-referrer'); 
+        self.send_header('Content-Security-Policy',getattr(self,'csp',"default-src 'none'; frame-ancestors 'none'; base-uri 'none'"))
         for cookie in getattr(self,'out_cookies',[]):self.send_header('Set-Cookie',cookie)
         if getattr(self,'download_name',None):self.send_header('Content-Disposition','attachment; filename="'+self.download_name+'"')
         self.end_headers(); self.wfile.write(b)
@@ -178,6 +196,17 @@ class H(BaseHTTPRequestHandler):
         if self.path.startswith('/api/auth/') and not auth_allowed(self.client_address[0]):return self.send(429,json.dumps({'ok':False,'message':'Too many sign-in attempts. Please wait a minute.'}))
         try: body=json_body(self)
         except Exception:return self.send(400,json.dumps({'error':'Invalid JSON'}))
+        if self.path in ('/api/auth/register','/api/auth/login','/api/auth/reset-request','/api/auth/resend'):
+            email=str(body.get('email','')).strip().lower()
+            c=db();allowed=security.auth_limit(c,email,self.client_address[0],now().strftime('%Y-%m-%dT%H:%M'));c.close()
+            if not allowed:return self.send(429,json.dumps({'message':'Too many authentication requests. Please try later.'}))
+        if os.getenv('VANTIX_ENV')=='production' and self.path in ('/api/auth/register','/api/auth/reset-request','/api/auth/resend'):
+            email=str(body.get('email','')).strip().lower();pw=body.get('password','')
+            if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email) or len(email)>254 or (self.path.endswith('register') and (not isinstance(pw,str) or not 8<=len(pw)<=256)):
+                return self.send(400,json.dumps({'message':'Use a valid email and a password of 8–256 characters.'}))
+            action=self.path
+            if not mail_service.enqueue(lambda:email_action(action,email,pw)):return self.send(503,json.dumps({'message':'Email requests are busy. Please try later.'}))
+            return self.send(200,json.dumps({'ok':True,'message':'If eligible, check your email to continue.'}))
         extra_paths=('/api/auth/reset-request','/api/auth/reset','/api/auth/resend','/api/events','/api/saved/add','/api/saved/remove','/api/profile','/api/feed/reaction','/api/feed/report','/api/admin/moderate','/api/notifications/read','/api/ai')
         if self.path in extra_paths:
             c=db();u=user_from_request(self)
@@ -187,22 +216,29 @@ class H(BaseHTTPRequestHandler):
             result=launch_features.post(self,self.path,body,c,u,hashpw);c.close()
             if result:return self.send(result[0],json.dumps(result[1]))
         if self.path=='/api/auth/logout':
-            c=db(); c.execute('DELETE FROM sessions WHERE token=?',(token_hash(request_token(self)),)); c.commit(); c.close(); self.session_cookie(clear=True); return self.send(200,json.dumps({'ok':True}))
+            c=db(); c.execute('DELETE FROM sessions WHERE token=?',(token_hash(request_token(self)),)); c.commit(); security.audit(c,'logout');c.close(); self.session_cookie(clear=True); return self.send(200,json.dumps({'ok':True}))
         if self.path=='/api/auth/register':
             email=str(body.get('email','')).strip().lower(); pw=str(body.get('password',''))
             if not re.fullmatch(r'[^\s@]+@[^\s@]+\.[^\s@]+',email) or len(email)>254 or not 8<=len(pw)<=256:return self.send(400,json.dumps({'ok':False,'message':'Use a valid email and a password of 8–256 characters.'}))
+            hashed=hashpw(pw)
             c=db()
             try:
-                cur=c.execute('INSERT INTO users(email,password_hash,created_at) VALUES(?,?,?)',(email,hashpw(pw),iso(now()))); uid=cur.lastrowid; tok=secrets.token_urlsafe(32); c.execute('INSERT INTO verify_tokens(token,user_id,expires_at) VALUES(?,?,?)',(token_hash(tok),uid,iso(now()+timedelta(hours=24)))); c.commit()
-            except sqlite3.IntegrityError:c.close();return self.send(409,json.dumps({'ok':False,'message':'An account with that email already exists.'}))
-            c.close(); sent,dev=send_verification(email,tok); return self.send(200,json.dumps({'ok':True,'message':'Account created. Verify your email before posting or commenting.','email_sent':sent,'dev_verification_url':dev if not sent and os.getenv('VANTIX_ENV')!='production' else None}))
+                cur=c.execute('INSERT INTO users(email,password_hash,created_at) VALUES(?,?,?)',(email,hashed,iso(now()))); uid=cur.lastrowid; tok=secrets.token_urlsafe(32); c.execute('INSERT INTO verify_tokens(token,user_id,expires_at) VALUES(?,?,?)',(token_hash(tok),uid,iso(now()+timedelta(hours=24)))); c.commit()
+            except sqlite3.IntegrityError:c.rollback();c.close();return self.send(200,json.dumps({'ok':True,'message':'If eligible, check your email to continue.'}))
+            c.close(); sent,dev=send_verification(email,tok); return self.send(200,json.dumps({'ok':True,'message':'If eligible, check your email to continue.','dev_verification_url':dev if not sent and os.getenv('VANTIX_ENV')!='production' else None}))
         if self.path=='/api/auth/login':
             email=str(body.get('email','')).strip().lower(); pw=str(body.get('password','')); c=db(); u=c.execute('SELECT * FROM users WHERE email=?',(email,)).fetchone()
-            if len(pw)>256 or not u or not checkpw(pw,u['password_hash']):c.close();return self.send(401,json.dumps({'ok':False,'message':'Invalid email or password.'}))
+            if not checkpw(pw,u['password_hash'] if u else security.DUMMY_HASH) or not u:security.audit(c,'login_failed');c.close();return self.send(401,json.dumps({'ok':False,'message':'Invalid email or password.'}))
             banned=c.execute('SELECT banned FROM profiles WHERE user_id=?',(u['id'],)).fetchone()
             if banned and banned['banned']:c.close();return self.send(403,json.dumps({'message':'Account suspended. Contact the site owner.'}))
             if not u['verified']:c.close();return self.send(403,json.dumps({'ok':False,'message':'Verify your email before signing in.'}))
-            tok=secrets.token_urlsafe(32); c.execute('INSERT INTO sessions(token,user_id,expires_at) VALUES(?,?,?)',(token_hash(tok),u['id'],iso(now()+timedelta(days=7))));launch_features.record(c,u['id'],'login');c.close();self.session_cookie(tok);return self.send(200,json.dumps({'ok':True,'authenticated':True,'token':tok if os.getenv('VANTIX_ENV')!='production' else None,'user':{'id':u['id'],'email':u['email'],'verified':True}}))
+            authenticated_hash=u['password_hash']
+            if security.needs_rehash(u['password_hash']):
+                upgraded=hashpw(pw);c.execute('UPDATE users SET password_hash=? WHERE id=? AND password_hash=?',(upgraded,u['id'],u['password_hash']));c.commit();authenticated_hash=upgraded
+            tok=secrets.token_urlsafe(32)
+            issued=c.execute('INSERT INTO sessions(token,user_id,expires_at) SELECT ?,id,? FROM users WHERE id=? AND password_hash=? AND verified=1 AND NOT EXISTS(SELECT 1 FROM profiles WHERE user_id=users.id AND banned=1) RETURNING user_id',(token_hash(tok),iso(now()+timedelta(days=7)),u['id'],authenticated_hash)).fetchone()
+            if not issued:c.rollback();c.close();return self.send(401,json.dumps({'message':'Account changed. Please sign in again.'}))
+            launch_features.record(c,u['id'],'login');security.audit(c,'login',u['id']);c.close();self.session_cookie(tok);return self.send(200,json.dumps({'ok':True,'authenticated':True,'token':tok if os.getenv('VANTIX_ENV')!='production' else None,'user':{'id':u['id'],'email':u['email'],'verified':True}}))
         if self.path in ('/api/feed/post','/api/feed/comment'):
             u=user_from_request(self)
             if u:
@@ -213,7 +249,7 @@ class H(BaseHTTPRequestHandler):
             if not u or not u['verified']:return self.send(401,json.dumps({'ok':False,'message':'Sign in with a verified account to post.'}))
             bodytxt=str(body.get('body','')).strip(); src=str(body.get('source_url','')).strip(); label=str(body.get('source_label','')).strip()
             if len(src)>2048 or len(label)>200:return self.send(400,json.dumps({'ok':False,'message':'Source URL or label is too long.'}))
-            if src and (urllib.parse.urlparse(src).scheme not in ('https','http') or not urllib.parse.urlparse(src).netloc): return self.send(400,json.dumps({'ok':False,'message':'Source must be an http or https URL.'}))
+            if src and not security.safeurl(src): return self.send(400,json.dumps({'ok':False,'message':'Source must be an http or https URL.'}))
             if not bodytxt or len(bodytxt)>1000:return self.send(400,json.dumps({'ok':False,'message':'Post must be 1–1000 characters.'}))
             c=db(); cur=c.execute('INSERT INTO posts(author_id,body,source_url,source_label,created_at) VALUES(?,?,?,?,?)',(u['id'],bodytxt,src,label,iso(now()))); pid=cur.lastrowid;label=str(body.get('label','Community commentary'));label=label if label in ('Community commentary','AI Interpretation','Rumour','Prediction') else 'Community commentary';c.execute('INSERT INTO post_labels(post_id,label) VALUES(?,?)',(pid,label));launch_features.record(c,u['id'],'feed_post');c.close();return self.send(200,json.dumps({'ok':True,'id':pid}))
         if self.path=='/api/feed/comment':
@@ -253,3 +289,4 @@ if __name__=='__main__':
         missing=check()
         if missing:raise SystemExit('Launch configuration incomplete: '+', '.join(missing))
     db().close(); operations.start(db); BoundedServer((os.getenv('HOST','127.0.0.1'),int(os.getenv('PORT','8000'))),H).serve_forever()
+

@@ -1,27 +1,35 @@
-# Security checklist triage — 2026-09-13
+# Security work — 2026-09-13
 
-This is a code review of the supplied checklist, not a penetration test or a claim that all items are fixed. The original scanner output, file/line references and exploit examples were not supplied. Findings must be traced to reachable code.
+This branch is not a complete penetration-test certification. Do not equate a successful deployment with security validation.
 
-| Item | Current evidence and disposition |
-|---|---|
-| 1. SQL injection / table whitelist | Reviewed dynamic table identifiers in server.py and launch_features.py are fixed tuples or ternaries after kind validation. User values are bound parameters. No injectable table identifier confirmed in these paths. Obtain original finding location before concluding repository-wide safety. |
-| 2. Bearer bypass | Production previously ignored Bearer headers, but non-production accepted valid session tokens from Authorization. It did not skip session lookup. This branch removes that alternate path entirely. Existing legacy backend tests need updating to cookies. |
-| 3. Argon2 | Current hashes are salted PBKDF2-HMAC-SHA256, 600000 iterations, not plaintext or a fast unsalted hash. Argon2id migration is pending: add tested dependency, bound hashing concurrency/memory, retain legacy verification and rehash after successful authentication. Render build currently only compiles Python; blindly adding an import would break deployment. |
-| 4. CSRF | Confirmed production misconfiguration gap: absent configured URL could fall back to request Host when an Origin was present. This branch fails closed when production URL or Origin is missing or mismatched. Startup preflight already requires URL. Local development behavior remains separate. |
-| 5. HTML escaping | Current frontend uses esc for dynamic text, and source-link helpers. Escaping must be reviewed by output context, not applied indiscriminately to stored input. No specific unescaped sink supplied. Full browser XSS coverage pending. |
-| 6. URL validation | HTTP(S) scheme and authority checks exist, but credential/control-character/port validation needs tightening in server and browser paths. Provider outbound URLs are fixed. Pending. |
-| 7. Enumeration | Registration exposes existing accounts with 409; login skips password hashing for unknown accounts. Reset/resend messages are generic in production, but timing depends on email sending. Confirmed hardening work remains, including a uniform response and bounded email dispatch approach. |
-| 8. Reset race | Reset already uses DELETE RETURNING and checks deletion result before updating the password in the write transaction. Sequential single-use is tested. Add concurrent local and libSQL tests and include expiry in the consuming DELETE; transaction-expiry cases still need review. |
-| 9. Logout revocation | Already deletes the hashed session token from the DB and clears the cookie. Existing integration checks confirm revocation locally. |
-| 10. Rate limiting | Auth currently has an in-memory per-socket-IP limiter. No per-email limiter. Shared proxies/process restarts and a bounded persistent email+IP strategy need attention. Do not trust arbitrary X-Forwarded-For without a verified proxy contract. |
-| 11. Audit | Moderation and export audit rows exist; login/action events exist. Security event coverage for failed logins, password reset and logout is incomplete. Never record passwords or raw tokens. |
-| 12. CSP | Absent. The page has inline script, onclick handlers/styles, exchange WebSockets and TradingView scripts/frames. A strict policy requires corresponding frontend refactoring and browser verification. A broad unsafe-inline policy is not a complete XSS fix. |
-| 13. Unicode | Length checks exist but field-specific Unicode handling needs review. Normalize display text as appropriate; do not silently normalize existing passwords or change account identity matching. Reject problematic controls while retaining legitimate languages. |
-| 14. Error verbosity | General request failures already return a generic 503; detailed exception classes are recorded internally. Some explicit validation messages are returned. No raw database exception exposure confirmed in reviewed HTTP wrapper. |
-| 15. Pooling | Connections are request-tracked and closed; remote libSQL uses a stateful HTTP baton and transactions. Pooling is a performance/design consideration, not by itself an injection vulnerability. Benchmark and test transaction isolation/rollback before pooling; never share one mutable connection across request threads. |
+## Implemented
+- Cookie-only session authentication; production requests fail closed on missing/mismatched origin configuration.
+- Argon2id new hashes (19 MiB, 2 iterations, one lane), at most two concurrent hash operations. Existing PBKDF2-600000 hashes remain verifiable and upgrade at successful login.
+- Session issuance checks the authenticated password version inside the write transaction, preventing login from creating a session after a concurrent password reset.
+- Reset token consuming DELETE includes expiry and uses RETURNING; two concurrent local requests yield one success. Replays do not change the password again. Logout removes the database session.
+- Production registration/reset/resend use identical eligible-account responses with bounded background email jobs. Unknown logins perform dummy hash verification. Legacy-hash timing differences may remain until migration; do not claim mathematically constant-time HTTP responses.
+- Persistent email-wide and email+peer throttles; no trust in arbitrary forwarded headers. Peer address may be the hosting proxy, so per-email control remains important. HMAC identifiers avoid raw IP storage in rate-limit buckets.
+- No visitor IPs in public responses or owner exports. Application access logging remains disabled. Hosting/provider logs are separately controlled and not anonymized by this patch.
+- Account security audit table records registration/email requests/login failures/login/logout/password reset, plus pre-existing moderation/export auditing. It excludes passwords, raw tokens and IPs and is retained for 30 days. This is not exhaustive infrastructure auditing.
+- Literal SQL lookup maps for dynamic table choices; user values remain bound parameters.
+- URL validation rejects non-HTTP(S), credentials, control characters, backslashes and invalid ports. Input validation rejects invalid Unicode/control sequences without altering passwords.
+- Hardened XML parser for external feeds.
+- CSP allows the hashed application script, TradingView script/frame origins and the two crypto WebSockets. Inline executable event attributes are removed and replaced by a literal-only command dispatcher. No eval. Inline styles remain allowed for existing layout.
+- Generic server errors preserved; owner reporting authorization preserved.
 
-## Validation of this branch
-17 existing launch/provider tests pass with cookies, including reset, authorization, moderation and exports. Three additional manual assertions pass: Bearer rejected, cookie parsed, production missing public URL rejected even with matching attacker-controlled Origin/Host. These are local tests, not live Render validation.
+## Checks
+- 46 backend checks, 36 launch/security/operations tests and 35 simulated UI checks passed during local verification.
+- SQLMap 1.10.9 ran against a loopback fixture, authenticated `/api/saved?kind=watchlist`, level 1/risk 1, Boolean/error/UNION techniques. It found no injectable parameter in that scope. Invalid payloads returned 400. This is not a scan of every endpoint or the deployed service.
+- Requirements audit: no known vulnerabilities reported for the checked dependencies (rerun in CI).
+- Static scan findings were reviewed: table names now use literal maps; remaining placeholder construction uses only '?' per validated numeric id; HTTPS outbound calls use fixed providers/validated URLs. Suppressed exception cleanup paths do not return exception details. Full static output is retained by GitHub CI.
+- Real-browser CSP/navigation/XSS regression is included in CI. Local Chromium download failed, so no local browser pass is claimed.
 
-## Deployment status
-Draft security review branch only. Not merged or deployed. Resolve the remaining items and test migration/browser compatibility before treating the checklist as complete. Keep secrets in hosting configuration. This document may become outdated: check the latest commit and update statuses as work progresses.
+## Gates before merging/deploying
+1. GitHub regression and real-browser workflow must pass at the branch head. TradingView is mocked in browser regression; live chart/frame loading still needs a deployed smoke check.
+2. Render Build Command must install dependencies: `pip install -r requirements.txt && python3 -m compileall -q .`. Updating render.yaml does not automatically reconfigure a manually created service. Keep Start Command `python3 server.py`. Do not merge code requiring these dependencies into an instance that only compiles files.
+3. Verify real Turso transaction behavior, login with an existing account, reset email and live chart after staging/deployment. Secrets remain in Render.
+4. Do not run public SQLMap load against real accounts or interpret this scoped result as complete absence of injection.
+
+## Deliberate limits
+Connection pooling is not introduced: mutable libSQL HTTP transaction batons cannot be safely shared across threads without a dedicated design and workload tests. Existing request cleanup/rollback is retained. Pooling is a performance consideration, not an automatic security fix.
+Email jobs are bounded and in-memory; a host restart may interrupt delivery. Users can resend. No claim of durable email scheduling or always-on free hosting.

@@ -1,3 +1,4 @@
+import security
 import os,json,re,math,secrets,hashlib
 from datetime import datetime,timezone,timedelta
 import ai_service,mail_service,free_data
@@ -53,7 +54,7 @@ def post(h,path,b,c,u,hashpw):
   result={'ok':True,'message':'If this account is eligible, an email will be sent. Check your inbox and spam folder.'}
   if r and (path.endswith('reset-request') or not r['verified']):
    reset=path.endswith('reset-request');token=secrets.token_urlsafe(32);table='reset_tokens' if reset else 'verify_tokens'
-   c.execute('DELETE FROM '+table+' WHERE user_id=?',(r['id'],));c.execute('INSERT INTO '+table+'(token,user_id,expires_at) VALUES(?,?,?)',(hashlib.sha256(token.encode()).hexdigest(),r['id'],(datetime.now(timezone.utc)+timedelta(minutes=30)).isoformat()));c.commit()
+   c.execute({'reset_tokens':'DELETE FROM reset_tokens WHERE user_id=?','verify_tokens':'DELETE FROM verify_tokens WHERE user_id=?'}[table],(r['id'],));c.execute({'reset_tokens':'INSERT INTO reset_tokens(token,user_id,expires_at) VALUES(?,?,?)','verify_tokens':'INSERT INTO verify_tokens(token,user_id,expires_at) VALUES(?,?,?)'}[table],(hashlib.sha256(token.encode()).hexdigest(),r['id'],(datetime.now(timezone.utc)+timedelta(minutes=30)).isoformat()));c.commit()
    base=os.getenv('VANTIX_PUBLIC_URL','http://localhost:8000').rstrip('/')
    link=base+('/reset-password#token='+token if reset else '/api/auth/verify?token='+token)
    sent=mail_service.send(email,'Reset your VANTIX password' if reset else 'Verify your VANTIX email','Open this link within 30 minutes:\n'+link+'\nIf you did not request this, ignore the email.')
@@ -65,9 +66,9 @@ def post(h,path,b,c,u,hashpw):
   # Compute before opening a remote write transaction.
   hashed=hashpw(pw);row=c.execute('SELECT user_id FROM reset_tokens WHERE token=? AND expires_at>?',(hashlib.sha256(token.encode()).hexdigest(),ts())).fetchone()
   if not row:return 400,{'message':'Reset link is invalid or expired.'}
-  deleted=c.execute('DELETE FROM reset_tokens WHERE token=? RETURNING user_id',(hashlib.sha256(token.encode()).hexdigest(),)).fetchone()
+  deleted=c.execute('DELETE FROM reset_tokens WHERE token=? AND expires_at>? RETURNING user_id',(hashlib.sha256(token.encode()).hexdigest(),ts())).fetchone()
   if not deleted:c.commit();return 400,{'message':'Reset link has already been used.'}
-  c.execute('UPDATE users SET password_hash=? WHERE id=?',(hashed,row['user_id']));c.execute('DELETE FROM sessions WHERE user_id=?',(row['user_id'],));c.commit();return 200,{'ok':True,'message':'Password changed. Sign in again.'}
+  c.execute('UPDATE users SET password_hash=? WHERE id=?',(hashed,row['user_id']));c.execute('DELETE FROM sessions WHERE user_id=?',(row['user_id'],));c.commit();security.audit(c,'password_reset',row['user_id']);return 200,{'ok':True,'message':'Password changed. Sign in again.'}
  if path=='/api/events':
   if b.get('consent') is not True:return 200,{'ok':True,'recorded':False}
   if not ai_service.reserve(c,'events-global',2000):return 429,{'message':'Analytics quota reached.'}
@@ -112,7 +113,7 @@ def post(h,path,b,c,u,hashpw):
   except (TypeError,ValueError):return 400,{'message':'Invalid target.'}
   if kind not in ('post','comment') or not 5<=len(reason)<=500:return 400,{'message':'Choose a post/comment and provide a 5–500 character reason.'}
   table='posts' if kind=='post' else 'comments'
-  if not c.execute('SELECT id FROM '+table+' WHERE id=?',(target,)).fetchone():return 404,{'message':'Content not found.'}
+  if not c.execute({'posts':'SELECT id FROM posts WHERE id=?','comments':'SELECT id FROM comments WHERE id=?'}[table],(target,)).fetchone():return 404,{'message':'Content not found.'}
   c.execute('INSERT INTO reports(user_id,kind,target_id,reason,created_at) VALUES(?,?,?,?,?)',(uid,kind,target,reason,ts()));record(c,uid,'report');return 200,{'ok':True}
  if path=='/api/admin/moderate':
   if not admin(u):return 403,{'message':'Owner access required.'}
@@ -120,7 +121,7 @@ def post(h,path,b,c,u,hashpw):
   try:target=int(b.get('target_id',0))
   except (TypeError,ValueError):return 400,{'message':'Invalid target.'}
   if action in ('hide','restore') and kind in ('post','comment'):
-   if not c.execute('SELECT id FROM '+('posts' if kind=='post' else 'comments')+' WHERE id=?',(target,)).fetchone():return 404,{'message':'Content not found.'}
+   if not c.execute({'post':'SELECT id FROM posts WHERE id=?','comment':'SELECT id FROM comments WHERE id=?'}[kind],(target,)).fetchone():return 404,{'message':'Content not found.'}
    if action=='hide':c.execute('INSERT OR REPLACE INTO hidden_content(kind,target_id,moderator_id,created_at) VALUES(?,?,?,?)',(kind,target,uid,ts()))
    else:c.execute('DELETE FROM hidden_content WHERE kind=? AND target_id=?',(kind,target))
    c.execute("UPDATE reports SET status='reviewed' WHERE kind=? AND target_id=?",(kind,target))
@@ -138,3 +139,4 @@ def post(h,path,b,c,u,hashpw):
   with free_data.LOCK:cache=dict(free_data.CACHE)
   result=ai_service.answer(question,uid,c,cache);record(c,uid,'ai_request');return (200 if result['status']=='AI_INTERPRETATION' else 503),result
  return None
+

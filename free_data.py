@@ -5,7 +5,7 @@ from urllib.parse import urlencode, quote, urlparse
 from urllib.request import Request, urlopen
 from urllib.error import HTTPError, URLError
 import socket,ssl
-from xml.etree import ElementTree as ET
+from defusedxml import ElementTree as ET
 from email.utils import parsedate_to_datetime
 
 CACHE={}
@@ -25,6 +25,7 @@ def number(value):
     return x
 
 def fetch(url):
+    if urlparse(url).scheme!='https':raise ValueError('HTTPS provider required')
     headers={'User-Agent':'VANTIX public information reader','Accept':'application/json, application/xml, text/xml'}
     if 'data.sec.gov/' in url:
         contact=os.getenv('SEC_USER_AGENT','')
@@ -221,3 +222,4 @@ def world_news():
             rows.append({'title':str(x.get('title','Untitled'))[:500],'link':link,'published':None,'seen_at':x.get('seendate'),'source':str(x.get('domain','Publisher'))+' via GDELT','category':'world','status':'INDEXED'})
         return rows
     return cached('world-news','GDELT news index',url,parse,900,'INDEXED')
+
