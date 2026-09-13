@@ -22,3 +22,6 @@ CREATE INDEX IF NOT EXISTS comment_parent ON comments(post_id,id);
 
 CREATE TABLE IF NOT EXISTS operation_runs(id INTEGER PRIMARY KEY,created_at TEXT NOT NULL,payload TEXT NOT NULL);
 CREATE INDEX IF NOT EXISTS operation_date ON operation_runs(created_at);
+
+
+CREATE TABLE IF NOT EXISTS security_audit(id INTEGER PRIMARY KEY,event TEXT NOT NULL,user_id INTEGER,created_at TEXT NOT NULL);

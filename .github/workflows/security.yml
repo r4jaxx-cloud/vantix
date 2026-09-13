@@ -1,0 +1,33 @@
+name: Security and regression checks
+on:
+  pull_request:
+  push:
+    branches: [main, security/auth-review-20260913]
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: pip install -r requirements.txt pip-audit bandit playwright
+      - run: python -m compileall -q .
+      - run: python test_backend.py
+      - run: python -m unittest test_launch test_operations test_security
+      - run: node test_ui.cjs
+      - run: pip-audit -r requirements.txt
+      - name: Static scan report
+        run: bandit -r . -x './test*' -f json -o bandit-report.json || test -f bandit-report.json
+      - run: python -m playwright install --with-deps chromium
+      - run: python test_browser.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-scan-report
+          path: bandit-report.json

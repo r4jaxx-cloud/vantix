@@ -3,7 +3,7 @@ services:
     name: vantix
     runtime: python
     plan: free
-    buildCommand: python3 -m compileall -q .
+    buildCommand: pip install -r requirements.txt && python3 -m compileall -q .
     startCommand: python3 server.py
     healthCheckPath: /api/health
     envVars:
@@ -29,3 +29,4 @@ services:
         sync: false
       - key: FREE_ACCOUNTS_CONFIRMED
         sync: false
+
