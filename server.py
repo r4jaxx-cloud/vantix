@@ -72,8 +72,7 @@ def request_token(h):
         cookie=SimpleCookie();cookie.load(h.headers.get('Cookie',''));value=cookie.get('vantix_session')
         if value:return value.value
     except Exception:pass
-    auth=h.headers.get('Authorization','')
-    return auth[7:] if os.getenv('VANTIX_ENV')!='production' and auth.startswith('Bearer ') else ''
+    return ''
 def token_hash(token):return hashlib.sha256(token.encode()).hexdigest()
 def user_from_request(h):
     token=request_token(h)
@@ -110,7 +109,8 @@ class H(BaseHTTPRequestHandler):
         self.out_cookies=[]
         origin=self.headers.get('Origin')
         expected=os.getenv('VANTIX_PUBLIC_URL','').rstrip('/')
-        if (origin and origin!=(expected or 'http://'+self.headers.get('Host',''))) or (os.getenv('VANTIX_ENV')=='production' and not origin):return self.send(403,json.dumps({'message':'Request origin rejected.'}))
+        production=os.getenv('VANTIX_ENV')=='production'
+        if (production and (not expected or not origin or origin!=expected)) or (not production and origin and origin!=(expected or 'http://'+self.headers.get('Host',''))):return self.send(403,json.dumps({'message':'Request origin rejected.'}))
         if self.headers.get('Content-Type','').split(';')[0]!='application/json':return self.send(415,json.dumps({'message':'Use application/json.'}))
         try:self.post_route()
         except (BrokenPipeError,ConnectionResetError):pass
