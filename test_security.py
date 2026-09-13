@@ -64,4 +64,18 @@ class Security(unittest.TestCase):
   self.assertEqual(results[0],results[1]);self.assertEqual(results[0][0],200)
  def test_audit_excludes_secrets(self):
   c=self.connect();security.audit(c,'password_reset',1);row=dict(c.execute('SELECT * FROM security_audit').fetchone());self.assertEqual(set(row),{'id','event','user_id','created_at'});c.close()
+ def test_ip_not_stored_in_limit_keys(self):
+  ip='192.0.2.123';server.AUTH_LIMITS.clear();server.auth_allowed(ip)
+  self.assertNotIn(ip,str(server.AUTH_LIMITS))
+  c=self.connect();security.auth_limit(c,'member@example.test',ip,'2026-09-13T02:00')
+  self.assertNotIn(ip,str([tuple(r) for r in c.execute('SELECT * FROM limits')]));c.close()
+ def test_generic_error_no_secret(self):
+  class H:
+   def get_route(self):raise RuntimeError('password=private-secret database-host')
+   def send(self,code,body):self.result=(code,body)
+  h=H();server.H.do_GET(h);self.assertEqual(h.result[0],503);self.assertNotIn('private-secret',h.result[1])
+ def test_sql_kind_whitelist(self):
+  c=self.connect();u=c.execute('SELECT * FROM users').fetchone()
+  result=launch_features.get(None,'/api/saved',{'kind':["watchlist' OR 1=1 --"]},c,u)
+  self.assertEqual(result[0],400);self.assertEqual(c.execute('SELECT count(*) FROM users').fetchone()[0],1);c.close()
 if __name__=='__main__':unittest.main()

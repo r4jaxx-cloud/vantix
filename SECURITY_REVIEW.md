@@ -18,11 +18,11 @@ This branch is not a complete penetration-test certification. Do not equate a su
 - Generic server errors preserved; owner reporting authorization preserved.
 
 ## Checks
-- 46 backend checks, 36 launch/security/operations tests and 35 simulated UI checks passed during local verification.
+- 46 backend checks, 39 launch/security/operations tests and 35 simulated UI checks passed during local verification.
 - SQLMap 1.10.9 ran against a loopback fixture, authenticated `/api/saved?kind=watchlist`, level 1/risk 1, Boolean/error/UNION techniques. It found no injectable parameter in that scope. Invalid payloads returned 400. This is not a scan of every endpoint or the deployed service.
 - Requirements audit: no known vulnerabilities reported for the checked dependencies (rerun in CI).
 - Static scan findings were reviewed: table names now use literal maps; remaining placeholder construction uses only '?' per validated numeric id; HTTPS outbound calls use fixed providers/validated URLs. Suppressed exception cleanup paths do not return exception details. Full static output is retained by GitHub CI.
-- Real-browser CSP/navigation/XSS regression is included in CI. Local Chromium download failed, so no local browser pass is claimed.
+- Real-browser CSP/navigation/XSS regression passed in GitHub Actions run 34776787370 at commit 08e2cf206abbd6fc95cc4cb350d79d9fd9e4fffd. Local Chromium download failed; GitHub provided the browser validation. External chart code is mocked. Three additional local regressions cover IP privacy, generic errors and SQL whitelist rejection; recheck CI after this update.
 
 ## Gates before merging/deploying
 1. GitHub regression and real-browser workflow must pass at the branch head. TradingView is mocked in browser regression; live chart/frame loading still needs a deployed smoke check.
