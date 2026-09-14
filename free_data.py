@@ -1,5 +1,6 @@
 """Free public data adapters. No paid keys, synthetic fallbacks or invented timestamps."""
 import json, os, re, time, threading, math
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from urllib.parse import urlencode, quote, urlparse
 from urllib.request import Request, urlopen
@@ -31,7 +32,7 @@ def fetch(url):
         contact=os.getenv('SEC_USER_AGENT','')
         if not contact or '@' not in contact:raise ValueError('SEC requires the site owner to configure an identifying contact address')
         headers['User-Agent']=contact
-    with urlopen(Request(url,headers=headers),timeout=8) as r:
+    with urlopen(Request(url,headers=headers),timeout=4) as r:
         raw=r.read(5_000_001)
     if len(raw)>5_000_000:raise ValueError('Response too large')
     return raw
@@ -71,6 +72,13 @@ def cached(key,source,url,loader,ttl=300,cadence='PERIODIC'):
         if len(CACHE)>150:CACHE.pop(next(iter(CACHE)))
     return {k:v for k,v in result.items() if not k.startswith('_')}
 
+def parallel(functions):
+    """Run a small, fixed group of independent public providers concurrently."""
+    if not functions:return []
+    with ThreadPoolExecutor(max_workers=len(functions),thread_name_prefix='vantix-source') as pool:
+        futures=[pool.submit(fn) for fn in functions]
+        return [future.result() for future in futures]
+
 def binance_crypto():
     url='https://data-api.binance.vision/api/v3/ticker/24hr?'+urlencode({'symbols':json.dumps(['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','DOGEUSDT','XRPUSDT','ADAUSDT'],separators=(',',':'))})
     def parse():
@@ -99,7 +107,7 @@ def bybit_crypto():
 
 def crypto():
     # Two independently cached public spot feeds. Prefer fresh observations to stale ones.
-    sources=[binance_crypto(),bybit_crypto()];rows=[]
+    sources=parallel([binance_crypto,bybit_crypto]);rows=[]
     for symbol in TRACKED_CRYPTO:
         options=[]
         for source in sources:
@@ -162,7 +170,7 @@ def filings(cik):
     return cached('filings'+cik,'SEC EDGAR',url,parse,600,'FILED')
 
 def market():
-    a=crypto();b=forex();rows=[]
+    a,b=parallel([crypto,forex]);rows=[]
     for result in (a,b):
         for row in result['data']:rows.append({**row,'status':'STALE' if result['status']=='STALE' else row['status'],'retrieved_at':result['retrieved_at']})
     return {'data':rows,'sources':a.get('sources',[a])+[b],'checked_at':stamp()}
@@ -171,7 +179,7 @@ def news(topic='all'):
     keys=['policy','energy','world'] if topic=='all' else [topic]
     functions=[events if k=='world' else (lambda k=k:rss(k)) for k in keys]
     if 'world' in keys:functions.append(world_news)
-    results=[f() for f in functions];rows=[]
+    results=parallel(functions);rows=[]
     for result in results:
         rows.extend({**r,'status':'STALE' if result['status']=='STALE' else r['status']} for r in result['data'])
     def dated(x):
@@ -222,4 +230,3 @@ def world_news():
             rows.append({'title':str(x.get('title','Untitled'))[:500],'link':link,'published':None,'seen_at':x.get('seendate'),'source':str(x.get('domain','Publisher'))+' via GDELT','category':'world','status':'INDEXED'})
         return rows
     return cached('world-news','GDELT news index',url,parse,900,'INDEXED')
-

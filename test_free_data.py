@@ -1,5 +1,5 @@
 """Contract and failure tests use fixtures, never production demo data."""
-import json, unittest
+import json, time, unittest
 from unittest.mock import patch
 import free_data as d
 
@@ -24,7 +24,7 @@ class FreeDataTests(unittest.TestCase):
   stale=d.cached('test','source','https://example.com',fail,0)
   self.assertEqual(stale['retrieved_at'],r['retrieved_at']);self.assertEqual(stale['status'],'STALE');self.assertEqual(stale['data'],r['data'])
  def test_cache_limits_requests(self):
-  with patch.object(d,'fetch',return_value=b'[]') as f:d.crypto();d.crypto();self.assertEqual(f.call_count,1)
+  with patch.object(d,'fetch',return_value=b'[]') as f:d.crypto();d.crypto();self.assertEqual(f.call_count,2)
  def test_rss_external_links_sanitized(self):
   with patch.object(d,'fetch',return_value=b'<rss><channel><item><title>Test</title><link>javascript:alert(1)</link><pubDate>Tue, 01 Jan 2019 00:00:00 GMT</pubDate></item></channel></rss>'):
    row=d.rss('energy')['data'][0];self.assertEqual(row['link'],'');self.assertEqual(row['source'],'US EIA')
@@ -40,4 +40,20 @@ class FreeDataTests(unittest.TestCase):
  def test_usgs_timestamp(self):
   with patch.object(d,'fetch',return_value=json.dumps({'features':[{'properties':{'title':'Fixture event','time':1700000000000,'url':'https://earthquake.usgs.gov/example'}}]}).encode()):
    self.assertTrue(d.events()['data'][0]['published'].startswith('2023-'))
+
+class ProviderConcurrency(unittest.TestCase):
+ def slow(self,source):
+  time.sleep(0.1);return {'data':[],'source':source,'source_url':'https://example.test','status':'PUBLISHED','checked_at':'2026-09-13T00:00:00+00:00','retrieved_at':None,'message':None,'error_code':None}
+ def test_news_sources_do_not_delay_each_other(self):
+  started=time.monotonic()
+  with patch.object(d,'rss',side_effect=lambda topic:self.slow(topic)),patch.object(d,'events',side_effect=lambda:self.slow('events')),patch.object(d,'world_news',side_effect=lambda:self.slow('world')):
+   response=d.news()
+  self.assertEqual(len(response['sources']),4);self.assertLess(time.monotonic()-started,0.3)
+ def test_market_groups_do_not_delay_each_other(self):
+  started=time.monotonic()
+  crypto=lambda:(time.sleep(0.1) or {**self.slow('crypto'),'status':'SNAPSHOT','sources':[]})
+  with patch.object(d,'crypto',side_effect=crypto),patch.object(d,'forex',side_effect=lambda:self.slow('forex')):
+   response=d.market()
+  self.assertIn('sources',response);self.assertLess(time.monotonic()-started,0.25)
+
 if __name__=='__main__':unittest.main()

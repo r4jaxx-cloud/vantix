@@ -19,7 +19,7 @@ jobs:
       - run: pip install -r requirements.txt pip-audit bandit playwright
       - run: python -m compileall -q .
       - run: python test_backend.py
-      - run: python -m unittest test_launch test_operations test_security
+      - run: python -m unittest test_launch test_operations test_security test_free_data
       - run: node test_ui.cjs
       - run: pip-audit -r requirements.txt
       - name: Static scan report
