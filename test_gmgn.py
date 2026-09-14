@@ -13,6 +13,14 @@ class GMGNTests(unittest.TestCase):
   with patch.dict(os.environ,{'GMGN_API_KEY':'test'}),patch.object(g,'request',return_value={'rank':[row]}):
    result=g.trending('sol','5m');item=result['data'][0]
   self.assertEqual(item['symbol'],'WOW');self.assertEqual(item['market_cap'],1000);self.assertEqual(item['status'],'PROVIDER_QUERY');self.assertNotIn('test',str(result))
+ def test_trending_accepts_nested_success_envelope(self):
+  with patch.dict(os.environ,{'GMGN_API_KEY':'test'}),patch.object(g,'request',return_value={'code':0,'data':{'rank':[{'symbol':'BTC','price':'10'}]}}):
+   result=g.trending();self.assertEqual(result['status'],'PROVIDER_QUERY');self.assertEqual(result['data'][0]['price'],10)
+ def test_trending_rejects_nested_error_and_malformed_payload(self):
+  for payload in ({'code':1,'data':{'rank':[{'price':10}]}},{'code':0,'data':[]},{'code':0,'data':{'rank':{}}}):
+   free_data.CACHE.clear()
+   with patch.dict(os.environ,{'GMGN_API_KEY':'test'}),patch.object(g,'request',return_value=payload):
+    result=g.trending();self.assertEqual(result['status'],'UNAVAILABLE');self.assertEqual(result['data'],[])
  def test_fresh_uses_documented_new_creation_list(self):
   row={'address':'0x'+'a'*40,'symbol':'NEW','usd_market_cap':'1200','swaps_1m':'4','created_timestamp':'1700000000'}
   with patch.dict(os.environ,{'GMGN_API_KEY':'test'}),patch.object(g,'request',return_value={'new_creation':[row]}):
