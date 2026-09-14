@@ -85,6 +85,22 @@ class Providers(unittest.TestCase):
   self.c=sqlite3.connect(':memory:');self.c.row_factory=sqlite3.Row;self.c.executescript(Path(__file__).with_name('launch_schema.sql').read_text())
   self.cache={'crypto':{'status':'SNAPSHOT','retrieved_at':server.iso(server.now()),'data':[{'symbol':'BTC','price':10,'source_url':'https://example.test/source'}]}}
  def tearDown(self):self.c.close()
+
+ def test_ai_failure_diagnostics_are_sanitized(self):
+  env={'OPENROUTER_API_KEY':'secret-fixture','OPENROUTER_FREE_ONLY':'1'}
+  cases=[(HTTPError('https://example.test/secret',401,'secret-fixture',{},None),'AUTH_REJECTED'),(HTTPError('https://example.test',429,'secret-fixture',{},None),'PROVIDER_RATE_LIMIT'),(TimeoutError('secret-fixture'),'PROVIDER_TIMEOUT'),(ValueError('secret-fixture'),'INVALID_RESPONSE')]
+  for error,code in cases:
+   with self.subTest(code=code),patch.dict(os.environ,env,clear=True),patch('ai_service.post',side_effect=error),patch('ai_service.operations.fault') as fault,self.assertLogs('vantix.ai',level='WARNING') as logs:
+    result=ai_service.answer('BTC',1,self.c,self.cache)
+    self.assertEqual(result['diagnostics'],[{'provider':'openrouter','code':code}])
+    self.assertNotIn('secret-fixture',json.dumps(result)+str(logs.output))
+    fault.assert_called_with('ai-openrouter',code)
+ def test_ai_site_cap_does_not_call_provider(self):
+  env={'OPENROUTER_API_KEY':'test','OPENROUTER_FREE_ONLY':'1'}
+  with patch.dict(os.environ,env,clear=True),patch('ai_service.reserve',side_effect=[True,False]),patch('ai_service.post') as post:
+   result=ai_service.answer('BTC',1,self.c,self.cache)
+   self.assertEqual(result['diagnostics'][0]['code'],'SITE_DAILY_LIMIT');post.assert_not_called()
+
  def test_nvidia_not_production(self):
   with patch.dict(os.environ,{'VANTIX_ENV':'production','NVIDIA_API_KEY':'test','NVIDIA_DEVELOPMENT_ENABLED':'1'},clear=True):self.assertEqual(ai_service.enabled(),[])
  def test_fallback_and_bound_sources(self):
