@@ -15,7 +15,7 @@ def ck(label,condition):
  assert condition,label
  checks.append(label)
 try:
- for path in ['/','/markets','/crypto','/forex','/stocks','/commodities','/economy','/news','/feed','/shield','/radar','/watchlist','/alerts','/research','/copilot','/sectors','/portfolio']:
+ for path in ['/','/markets','/crypto','/trending','/forex','/stocks','/commodities','/economy','/news','/feed','/shield','/radar','/watchlist','/alerts','/research','/copilot','/sectors','/portfolio']:
   ck('Route '+path,call(path)[0]==200)
  ck('Unknown page is 404',call('/page-does-not-exist')[0]==404)
  ck('Invalid email rejected',call('/api/auth/register',{'email':'bad\n@example.test','password':'password123'})[0]==400)
@@ -42,6 +42,8 @@ try:
  ck('Invalid economic country handled',call('/api/economy?country=INVALID')[0]==400)
  ck('Invalid filing CIK handled',call('/api/filings?cik=invalid')[0]==400)
  ck('Unknown news topic handled',call('/api/news?topic=invalid')[0]==400)
+ ck('GMGN is explicit when not configured',call('/api/gmgn/trending')[1]['status']=='UNCONFIGURED')
+ ck('Invalid GMGN filters rejected',call('/api/gmgn/trending?chain=bad')[0]==400)
  ck('Unknown API is 404',call('/api/missing')[0]==404)
  ck('Shield defaults unknown',call('/api/shield?token=abc')[1]['status']=='UNKNOWN')
  def fail(*a,**k):raise OSError('Provider unavailable')
@@ -52,4 +54,3 @@ try:
  print(json.dumps({'passed':len(checks),'checks':checks},indent=2))
  pathlib.Path(__file__).with_name('VALIDATION.json').write_text(json.dumps({'passed':len(checks),'checks':checks,'limits':['No browser visual QA performed','Real provider connectivity not validated','Remote database adapter tested separately; live connection not validated','Not ready for public deployment']},indent=2))
 finally:server.shutdown();server.server_close();tmp.cleanup()
-

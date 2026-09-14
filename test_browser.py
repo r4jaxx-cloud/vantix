@@ -19,5 +19,8 @@ try:
   escaped=page.evaluate('esc(\'<img src=x onerror="alert(1)">\')');assert '&lt;img' in escaped
   assert page.evaluate("safeLink('https://user:pass@example.com')")==''
   page.evaluate("dispatchCommand(\"go('/crypto')\")");page.wait_for_url('**/crypto')
+  page.evaluate("dispatchCommand(\"go('/trending')\")");page.wait_for_url('**/trending')
+  page.get_by_role('heading',name='Trending & Fresh Coins').wait_for()
+  assert 'not a recommendation' in page.locator('#page').inner_text()
   assert not errors,errors;browser.close();print('Browser CSP, navigation, charts and escaping regressions passed')
 finally:s.shutdown();s.server_close()

@@ -1,6 +1,6 @@
 import security,base64
 from security import hashpw,checkpw
-import free_data, storage, launch_features, mail_service, ai_service, operations, owner_reports
+import free_data, storage, launch_features, mail_service, ai_service, operations, owner_reports, gmgn_service
 from http.cookies import SimpleCookie
 import json, os, re, threading, time, urllib.request, urllib.parse, urllib.error, sqlite3, hashlib, hmac, secrets, smtplib
 from email.message import EmailMessage
@@ -12,7 +12,7 @@ ROOT=Path(__file__).parent
 DB=Path(os.getenv('VANTIX_DB_PATH',str(ROOT/'vantix.db')))
 AUTH_LIMITS={}
 AUTH_LOCK=threading.Lock()
-PUBLIC_ROUTES={'/','/ask','/markets','/crypto','/stocks','/forex','/commodities','/economy','/news','/feed','/radar','/shield','/watchlist','/alerts','/research','/copilot','/sectors','/portfolio','/account','/admin','/reset-password','/privacy','/terms'}
+PUBLIC_ROUTES={'/','/ask','/markets','/crypto','/trending','/stocks','/forex','/commodities','/economy','/news','/feed','/radar','/shield','/watchlist','/alerts','/research','/copilot','/sectors','/portfolio','/account','/admin','/reset-password','/privacy','/terms'}
 def auth_allowed(ip):
     ip=security.private_id(ip)
     with AUTH_LOCK:
@@ -154,6 +154,11 @@ class H(BaseHTTPRequestHandler):
         if p.path=='/api/health':
             return self.send(200,json.dumps({'ok':True,'service':'VANTIX','mode':'free-only','note':'Service health is not provider health. Each data response reports its own status.'}))
         if p.path=='/api/market': return self.send(200,json.dumps(free_data.market()))
+        if p.path in ('/api/gmgn/trending','/api/gmgn/fresh'):
+            chain=(q.get('chain') or ['sol'])[0];interval=(q.get('interval') or ['5m'])[0]
+            try:result=gmgn_service.trending(chain,interval) if p.path.endswith('trending') else gmgn_service.fresh(chain)
+            except ValueError:return self.send(400,json.dumps({'message':'Choose a supported GMGN chain and interval.'}))
+            return self.send(200,json.dumps(result))
         if p.path=='/api/news':
             topic=(q.get('topic') or ['all'])[0]
             if topic not in ('all','world','energy','policy'):return self.send(400,json.dumps({'message':'Unknown news topic'}))
@@ -289,4 +294,3 @@ if __name__=='__main__':
         missing=check()
         if missing:raise SystemExit('Launch configuration incomplete: '+', '.join(missing))
     db().close(); operations.start(db); BoundedServer((os.getenv('HOST','127.0.0.1'),int(os.getenv('PORT','8000'))),H).serve_forever()
-
