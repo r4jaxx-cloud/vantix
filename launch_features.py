@@ -136,7 +136,12 @@ def post(h,path,b,c,u,hashpw):
   question=str(b.get('question','')).strip()
   if not 3<=len(question)<=1500:return 400,{'message':'Use a question of 3–1500 characters.'}
   if b.get('consent') is not True:return 400,{'message':'Confirm sending this question to the configured AI providers.'}
+  history=b.get('history',[])
+  if not isinstance(history,list) or len(history)>4 or any(not isinstance(x,dict) or x.get('role') not in ('user','assistant') or not isinstance(x.get('content'),str) or len(x['content'])>1500 for x in history):
+   return 400,{'message':'Conversation context is invalid. Refresh and try again.'}
+  history=[{'role':x['role'],'content':x['content']} for x in history]
   with free_data.LOCK:cache=dict(free_data.CACHE)
-  result=ai_service.answer(question,uid,c,cache);record(c,uid,'ai_request');return (200 if result['status']=='AI_INTERPRETATION' else 503),result
+  result=ai_service.answer(question,uid,c,cache,history);record(c,uid,'ai_request');return (200 if result['status']=='AI_INTERPRETATION' else 503),result
  return None
+
 
