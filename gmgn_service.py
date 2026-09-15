@@ -59,6 +59,10 @@ def trending(chain='sol',interval='5m'):
  url='https://gmgn.ai/ai'
  def load():
   data=request('GET','/v1/market/rank',{'chain':chain,'interval':interval,'limit':30,'order_by':'volume','direction':'desc'})
+  # Some rank responses retain the upstream success envelope.
+  if 'rank' not in data and 'code' in data:
+   if data.get('code')!=0 or not isinstance(data.get('data'),dict):raise ValueError('GMGN rank request failed')
+   data=data['data']
   rows=data.get('rank')
   if not isinstance(rows,list):raise ValueError('GMGN rank list missing')
   return [normalized(x,chain) for x in rows[:30] if isinstance(x,dict)]
