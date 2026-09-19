@@ -8,12 +8,22 @@ def admin(u):return bool(u and u['verified'] and u['email'].lower() in {x.strip(
 def record(c,uid,event,path=''):
  c.execute('INSERT INTO events(user_id,event,path,created_at) VALUES(?,?,?,?)',(uid,event,path,ts()));c.commit()
 def valid_kind(k):return k in ('watchlist','portfolio','alerts')
+def community_rows(c,viewer=0):
+ rows=c.execute("SELECT u.id,coalesce(p.display_name,'Member '||u.id) display_name,(SELECT count(*) FROM posts x WHERE x.author_id=u.id AND NOT EXISTS(SELECT 1 FROM hidden_content h WHERE h.kind='post' AND h.target_id=x.id)) posts,(SELECT count(*) FROM comments x WHERE x.author_id=u.id AND NOT EXISTS(SELECT 1 FROM hidden_content h WHERE h.kind='comment' AND h.target_id=x.id)) comments,(SELECT count(*) FROM reactions r JOIN posts x ON x.id=r.post_id WHERE x.author_id=u.id AND r.user_id<>x.author_id AND NOT EXISTS(SELECT 1 FROM hidden_content h WHERE h.kind='post' AND h.target_id=x.id)) likes,(SELECT count(*) FROM follows WHERE followed_id=u.id) followers,(SELECT count(*) FROM follows WHERE follower_id=? AND followed_id=u.id) following FROM users u LEFT JOIN profiles p ON p.user_id=u.id WHERE u.verified=1 AND coalesce(p.banned,0)=0",(viewer,)).fetchall();out=[]
+ for r in rows:
+  x=dict(r);x['points']=x['posts']*5+x['comments']*2+x['likes']+x['followers']*3
+  x['badge']='Market Leader' if x['points']>=100 else 'Analyst' if x['points']>=40 else 'Contributor' if x['points']>=10 else 'Member';out.append(x)
+ out.sort(key=lambda x:(-x['points'],-x['followers'],x['id']))
+ for i,x in enumerate(out[:25],1):x['rank']=i
+ return out[:25]
 def get(h,path,q,c,u):
  if path=='/api/capabilities':return 200,{'support_email':os.getenv('SUPPORT_EMAIL',''),'ai_configured':bool(ai_service.enabled()),'ai_providers':[p[0] for p in ai_service.enabled()],'persistent_storage':bool(os.getenv('LIBSQL_URL')),'email_configured':mail_service.configured(),'mode':'public' if os.getenv('VANTIX_ENV')=='production' else 'local'}
  if path=='/api/profile':
   if not u:return 401,{'message':'Sign in to view your profile.'}
   r=c.execute('SELECT display_name FROM profiles WHERE user_id=?',(u['id'],)).fetchone()
-  return 200,{'id':u['id'],'display_name':r['display_name'] if r else 'Member '+str(u['id']),'verified':bool(u['verified']),'admin':admin(u)}
+  score=next((x for x in community_rows(c) if x['id']==u['id']),{'points':0,'badge':'Member','followers':0})
+  return 200,{'id':u['id'],'display_name':r['display_name'] if r else 'Member '+str(u['id']),'verified':bool(u['verified']),'admin':admin(u),'points':score['points'],'badge':score['badge'],'followers':score['followers']}
+ if path=='/api/community':return 200,{'data':community_rows(c,u['id'] if u else 0),'authenticated':bool(u)}
  if path=='/api/saved':
   if not u:return 401,{'message':'Sign in to access saved items.'}
   kind=(q.get('kind') or ['watchlist'])[0]
@@ -75,13 +85,21 @@ def post(h,path,b,c,u,hashpw):
   visitor=str(b.get('visitor',''));route=str(b.get('path',''))
   if not re.fullmatch(r'[a-zA-Z0-9-]{16,64}',visitor) or not re.fullmatch(r'/[a-z-]*',route):return 400,{'message':'Invalid event.'}
   c.execute('INSERT INTO events(visitor,user_id,event,path,created_at) VALUES(?,?,?,?,?)',(visitor,u['id'] if u else None,'page_view',route,ts()));c.commit();return 200,{'ok':True,'recorded':True}
- if path not in ('/api/saved/add','/api/saved/remove','/api/profile','/api/feed/reaction','/api/feed/report','/api/admin/moderate','/api/notifications/read','/api/ai'):return None
+ if path not in ('/api/saved/add','/api/saved/remove','/api/profile','/api/community/follow','/api/feed/reaction','/api/feed/report','/api/admin/moderate','/api/notifications/read','/api/ai'):return None
  if not u or not u['verified']:return 401,{'message':'Sign in with a verified account.'}
  uid=u['id']
  if path=='/api/profile':
   name=str(b.get('display_name','')).strip()
   if not 2<=len(name)<=40 or any(ord(x)<32 for x in name):return 400,{'message':'Display name must be 2–40 characters.'}
   c.execute('INSERT INTO profiles(user_id,display_name) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET display_name=excluded.display_name',(uid,name));c.commit();return 200,{'ok':True}
+ if path=='/api/community/follow':
+  try:target=int(b.get('user_id',0))
+  except (TypeError,ValueError):return 400,{'message':'Invalid member.'}
+  if target==uid:return 400,{'message':'You cannot follow yourself.'}
+  if not c.execute('SELECT id FROM users WHERE id=? AND verified=1',(target,)).fetchone():return 404,{'message':'Member not found.'}
+  if b.get('active') is True:c.execute('INSERT OR IGNORE INTO follows(follower_id,followed_id,created_at) VALUES(?,?,?)',(uid,target,ts()))
+  else:c.execute('DELETE FROM follows WHERE follower_id=? AND followed_id=?',(uid,target))
+  c.commit();return 200,{'ok':True}
  if path=='/api/saved/add':
   kind=b.get('kind');symbol=str(b.get('symbol','')).strip().upper();value=b.get('value')
   if not valid_kind(kind) or not re.fullmatch(r'[A-Z0-9/._-]{1,24}',symbol):return 400,{'message':'Invalid collection or symbol.'}
@@ -143,5 +161,3 @@ def post(h,path,b,c,u,hashpw):
   with free_data.LOCK:cache=dict(free_data.CACHE)
   result=ai_service.answer(question,uid,c,cache,history);record(c,uid,'ai_request');return (200 if result['status']=='AI_INTERPRETATION' else 503),result
  return None
-
-

@@ -148,7 +148,7 @@ class H(BaseHTTPRequestHandler):
                 c.execute('INSERT INTO audit(admin_id,action,target,created_at) VALUES(?,?,?,?)',(u['id'],'export',kind,iso(now())));c.commit();c.close()
             except ValueError:return self.send(400,json.dumps({'message':'Invalid report request.'}))
             self.download_name=name;return self.send(200,body,ctype)
-        if p.path in ('/api/capabilities','/api/profile','/api/saved','/api/notifications','/api/admin'):
+        if p.path in ('/api/capabilities','/api/profile','/api/community','/api/saved','/api/notifications','/api/admin'):
             c=db();result=launch_features.get(self,p.path,q,c,user_from_request(self));c.close()
             if result:return self.send(result[0],json.dumps(result[1]))
         if p.path=='/api/health':
@@ -170,16 +170,19 @@ class H(BaseHTTPRequestHandler):
             return self.send(200,json.dumps(result))
         if p.path=='/api/social': return self.send(200,json.dumps({'data':[],'configured':False,'status':'UNAVAILABLE','message':'Paid social APIs are disabled in the free-only build. Community posts are available in VANTIX Feed.'}))
         if p.path=='/api/feed':
-            c=db();u=user_from_request(self);uid=u['id'] if u else 0
-            rows=c.execute("SELECT p.*,coalesce(pr.display_name,'Member '||p.author_id) display_name,coalesce(l.label,'Community commentary') label,(SELECT count(*) FROM reactions r WHERE r.post_id=p.id) reactions,(SELECT count(*) FROM reactions r WHERE r.post_id=p.id AND r.user_id=?) reacted FROM posts p LEFT JOIN profiles pr ON pr.user_id=p.author_id LEFT JOIN post_labels l ON l.post_id=p.id WHERE NOT EXISTS(SELECT 1 FROM hidden_content h WHERE h.kind='post' AND h.target_id=p.id) ORDER BY p.id DESC LIMIT 50",(uid,)).fetchall();out=[]
+            c=db();u=user_from_request(self);uid=u['id'] if u else 0;mode=(q.get('sort') or ['latest'])[0]
+            if mode not in ('latest','trending','following'):c.close();return self.send(400,json.dumps({'message':'Invalid feed sort.'}))
+            rows=c.execute("SELECT p.*,coalesce(pr.display_name,'Member '||p.author_id) display_name,coalesce(l.label,'Community commentary') label,(SELECT count(*) FROM reactions r WHERE r.post_id=p.id) reactions,(SELECT count(*) FROM reactions r WHERE r.post_id=p.id AND r.user_id=?) reacted,(SELECT count(*) FROM follows f WHERE f.followed_id=p.author_id) followers,(SELECT count(*) FROM follows f WHERE f.follower_id=? AND f.followed_id=p.author_id) following FROM posts p LEFT JOIN profiles pr ON pr.user_id=p.author_id LEFT JOIN post_labels l ON l.post_id=p.id WHERE NOT EXISTS(SELECT 1 FROM hidden_content h WHERE h.kind='post' AND h.target_id=p.id) ORDER BY p.id DESC LIMIT 100",(uid,uid)).fetchall();out=[]
             ids=[r['id'] for r in rows];groups={x:[] for x in ids}
             if ids:
                 query="SELECT c.id,c.post_id,c.author_id,c.body,c.created_at,coalesce(pr.display_name,'Member '||c.author_id) display_name FROM comments c LEFT JOIN profiles pr ON pr.user_id=c.author_id WHERE c.post_id IN ("+','.join('?' for _ in ids)+") AND NOT EXISTS(SELECT 1 FROM hidden_content h WHERE h.kind='comment' AND h.target_id=c.id) ORDER BY c.id DESC LIMIT 500"
                 for item in c.execute(query,ids).fetchall():
                     if len(groups[item['post_id']])<50:groups[item['post_id']].append(dict(item))
             for row in rows:
-                comments=list(reversed(groups[row['id']]));out.append({**dict(row),'comments_list':comments,'comments':len(comments)})
-            c.close();return self.send(200,json.dumps({'data':out}))
+                comments=list(reversed(groups[row['id']]));item={**dict(row),'comments_list':comments,'comments':len(comments),'can_follow':bool(uid and uid!=row['author_id'])};out.append(item)
+            if mode=='following':out=[x for x in out if x['following']]
+            elif mode=='trending':out.sort(key=lambda x:(-(x['reactions']*3+x['comments']*2),-x['id']))
+            c.close();return self.send(200,json.dumps({'data':out[:50],'sort':mode}))
         if p.path=='/api/auth/verify':
             tok=(q.get('token') or [''])[0]; c=db(); r=c.execute('SELECT * FROM verify_tokens WHERE token=? AND expires_at>?',(token_hash(tok),iso(now()))).fetchone()
             if not r:c.close();return self.send(400,json.dumps({'ok':False,'message':'Verification link is invalid or expired.'}))
@@ -195,6 +198,9 @@ class H(BaseHTTPRequestHandler):
             except ValueError as e:return self.send(400,json.dumps({'status':'UNKNOWN','message':str(e),'data':[]}))
             return self.send(200,json.dumps(result))
         if p.path.startswith('/api/'): return self.send(404,json.dumps({'error':'Not found'}))
+        if p.path=='/manifest.webmanifest':return self.send(200,(ROOT/'manifest.webmanifest').read_text(encoding='utf-8'),'application/manifest+json')
+        if p.path=='/sw.js':return self.send(200,(ROOT/'sw.js').read_text(encoding='utf-8'),'application/javascript; charset=utf-8')
+        if p.path=='/icon.svg':return self.send(200,(ROOT/'icon.svg').read_text(encoding='utf-8'),'image/svg+xml')
         if (p.path.rstrip('/') or '/') not in PUBLIC_ROUTES:return self.send(404,'Page not found','text/plain; charset=utf-8')
         f=ROOT/'index.html'; return self.send(200,f.read_text(encoding='utf-8'),'text/html; charset=utf-8')
     def post_route(self):
@@ -212,7 +218,7 @@ class H(BaseHTTPRequestHandler):
             action=self.path
             if not mail_service.enqueue(lambda:email_action(action,email,pw)):return self.send(503,json.dumps({'message':'Email requests are busy. Please try later.'}))
             return self.send(200,json.dumps({'ok':True,'message':'If eligible, check your email to continue.'}))
-        extra_paths=('/api/auth/reset-request','/api/auth/reset','/api/auth/resend','/api/events','/api/saved/add','/api/saved/remove','/api/profile','/api/feed/reaction','/api/feed/report','/api/admin/moderate','/api/notifications/read','/api/ai')
+        extra_paths=('/api/auth/reset-request','/api/auth/reset','/api/auth/resend','/api/events','/api/saved/add','/api/saved/remove','/api/profile','/api/community/follow','/api/feed/reaction','/api/feed/report','/api/admin/moderate','/api/notifications/read','/api/ai')
         if self.path in extra_paths:
             c=db();u=user_from_request(self)
             if u and self.path not in ('/api/events','/api/notifications/read'):
