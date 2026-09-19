@@ -107,7 +107,7 @@ class H(BaseHTTPRequestHandler):
         if ctype.startswith('text/html'):
             scripts=re.findall(r'<script>([\s\S]*?)</script>',body)
             hashes=' '.join("'sha256-"+base64.b64encode(hashlib.sha256(x.encode()).digest()).decode()+"'" for x in scripts)
-            self.csp="default-src 'self'; script-src "+hashes+" https://s3.tradingview.com; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.tradingview.com; connect-src 'self' wss://data-stream.binance.vision wss://stream.bybit.com; frame-src https://*.tradingview.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
+            self.csp="default-src 'self'; script-src "+hashes+" https://s3.tradingview.com; script-src-attr 'none'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://*.tradingview.com; connect-src 'self' wss://data-stream.binance.vision wss://stream.bybit.com wss://ws-feed.exchange.coinbase.com; frame-src https://*.tradingview.com; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'"
         b=body.encode(); self.send_response(code); self.send_header('Content-Type',ctype); self.send_header('Content-Length',str(len(b))); self.send_header('Cache-Control','no-store'); self.send_header('X-Content-Type-Options','nosniff'); self.send_header('X-Frame-Options','DENY'); self.send_header('Referrer-Policy','no-referrer'); 
         self.send_header('Content-Security-Policy',getattr(self,'csp',"default-src 'none'; frame-ancestors 'none'; base-uri 'none'"))
         for cookie in getattr(self,'out_cookies',[]):self.send_header('Set-Cookie',cookie)
