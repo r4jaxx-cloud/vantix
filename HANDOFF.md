@@ -1,5 +1,13 @@
 # VANTIX handoff
 
+## 2026-09-19 follow-up
+- Live public scan: GMGN trending/fresh returned rows for SOL, BSC, Base and ETH; Binance stream updated; FX reference rates and news loaded. Bybit had no stream quotes in this environment. Signed-in AI/accounts, persistence, load and mobile are not verified.
+- This change preserves tiny token-price precision, refreshes GMGN filters automatically, rejects late responses from previous selections, labels stale/failed requests per section, and explains absent provider fields. Ratio displays no longer suggest positive price movement.
+- GMGN field mappings match current official trenches documentation; missing fields remain unknown, with no speculative substitutions.
+- Bybit parser matches the official spot snapshot example. Live connection timed out in the diagnostic environment; the root cause remains unresolved. Added connection/subscription status without changing endpoints or bypassing provider controls.
+- Regression results are recorded in the pull request. Deployment and live verification remain separate from fixture checks.
+- Remaining priorities: Bybit availability diagnosis, signed-in AI verification, licensed stock/commodity quote sources, account regression, production persistence and final launch checks.
+
 Updated 2026-09-13. Status reflects work and user screenshots from September 12, not a new live audit.
 
 ## Goal and constraints
