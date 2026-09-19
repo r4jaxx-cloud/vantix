@@ -1,5 +1,10 @@
 # VANTIX handoff
 
+## 2026-09-19 second-exchange follow-up
+- Bybit remains unavailable in the current cloud-browser test despite matching its official public WebSocket endpoint and schema. This may be environment-specific.
+- A separate Coinbase Exchange public ticker stream is prepared for BTC, ETH, SOL, DOGE, XRP and ADA USD pairs; BNB is explicitly marked unavailable rather than guessed. Binance/Bybit USDT and Coinbase USD quotes stay separate and are never averaged.
+- CSP, freshness validation, reconnection handling and fixture tests cover the added stream. Live verification is required after deployment.
+
 ## 2026-09-19 follow-up
 - Live public scan: GMGN trending/fresh returned rows for SOL, BSC, Base and ETH; Binance stream updated; FX reference rates and news loaded. Bybit had no stream quotes in this environment. Signed-in AI/accounts, persistence, load and mobile are not verified.
 - This change preserves tiny token-price precision, refreshes GMGN filters automatically, rejects late responses from previous selections, labels stale/failed requests per section, and explains absent provider fields. Ratio displays no longer suggest positive price movement.
@@ -41,6 +46,10 @@ Seven tracked USDT assets: BTC, ETH, BNB, SOL, DOGE, XRP, ADA. Main quote prefer
 6. operations.py has in-process monitoring/retries while the host is awake. It does not automatically repair source code and cannot ensure uptime when free Render sleeps. External monitoring and Cloudflare analytics were discussed, not configured.
 7. Broader stock/commodity/news coverage is incomplete. Check free API quotas and public redistribution rights before integration. CoinGecko plugin was connected and a read succeeded in chat, but CoinGecko website API integration is not implemented. Google Drive, GitHub, Binance and Alpaca were also reported installed/connected in chat; verify access in the new assistant environment.
 8. Run a focused public launch review and browser/mobile checks after changes. No complete production load test or all-feature launch sign-off has been done.
+
+## September 2026 exchange and trending update
+- Crypto comparison now keeps Binance USDT, Bybit USDT and Coinbase USD quotes separate; Coinbase is comparison-only and BNB is marked unavailable there.
+- Trending Coins uses a compact responsive card grid with chain/window controls plus local search, liquidity, market-cap, risk and sort filters. Local filtering does not make extra GMGN requests.
 
 ## Working instructions for the next assistant
 Read current repository files and any applicable instructions first; compare against this dated handoff. Preserve changes made since this handoff. Do not rebuild the site or migrate hosting without a user request. Prefer small, reviewable commits with targeted tests. Verify deployed behavior separately from a successful GitHub push. Render may auto-deploy main; a documentation commit may also trigger a deployment. Update this handoff with changes, checks and remaining blockers. Coordinate assistants to avoid concurrent conflicting edits. Claude takeover is manual: the user opens Claude and provides repository access; there is no automatic transfer when chat usage ends.
