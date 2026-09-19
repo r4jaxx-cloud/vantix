@@ -1,0 +1,14 @@
+{
+  "name": "VANTIX Market Intelligence",
+  "short_name": "VANTIX",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#020711",
+  "theme_color": "#071426",
+  "description": "Markets, trending coins and verified community discussion.",
+  "icons": [
+    {"src":"/icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"}
+  ]
+}

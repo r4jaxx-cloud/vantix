@@ -9,6 +9,8 @@ CREATE TABLE IF NOT EXISTS saved_items(id INTEGER PRIMARY KEY,user_id INTEGER NO
 CREATE INDEX IF NOT EXISTS saved_owner ON saved_items(user_id,kind);
 CREATE TABLE IF NOT EXISTS post_labels(post_id INTEGER PRIMARY KEY,label TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS reactions(user_id INTEGER NOT NULL,post_id INTEGER NOT NULL,PRIMARY KEY(user_id,post_id));
+CREATE TABLE IF NOT EXISTS follows(follower_id INTEGER NOT NULL,followed_id INTEGER NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(follower_id,followed_id));
+CREATE INDEX IF NOT EXISTS follows_target ON follows(followed_id);
 CREATE TABLE IF NOT EXISTS hidden_content(kind TEXT NOT NULL,target_id INTEGER NOT NULL,moderator_id INTEGER NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(kind,target_id));
 CREATE TABLE IF NOT EXISTS reports(id INTEGER PRIMARY KEY,user_id INTEGER NOT NULL,kind TEXT NOT NULL,target_id INTEGER NOT NULL,reason TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',created_at TEXT NOT NULL);
 CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,admin_id INTEGER NOT NULL,action TEXT NOT NULL,target TEXT NOT NULL,created_at TEXT NOT NULL);

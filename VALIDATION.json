@@ -1,9 +1,10 @@
 {
-  "passed": 46,
+  "passed": 49,
   "checks": [
     "Route /",
     "Route /markets",
     "Route /crypto",
+    "Route /trending",
     "Route /forex",
     "Route /stocks",
     "Route /commodities",
@@ -43,6 +44,8 @@
     "Invalid economic country handled",
     "Invalid filing CIK handled",
     "Unknown news topic handled",
+    "GMGN is explicit when not configured",
+    "Invalid GMGN filters rejected",
     "Unknown API is 404",
     "Shield defaults unknown",
     "Provider failure creates no market data",
@@ -53,15 +56,5 @@
     "Real provider connectivity not validated",
     "Remote database adapter tested separately; live connection not validated",
     "Not ready for public deployment"
-  ],
-  "suite_counts": {
-    "backend": 46,
-    "data_fixtures": 11,
-    "launch_and_provider": 17,
-    "operations_reports_sources": 9,
-    "interface_logic": 35
-  },
-  "total_passed": 118,
-  "deployed": false,
-  "live_integrations_verified": false
+  ]
 }

@@ -1,5 +1,14 @@
 # VANTIX handoff
 
+## 2026-09-19 community, analytics and PWA build
+- Prepared a refreshed dark-blue interface, larger controls and consistent modern cards without changing the single-page architecture.
+- Community adds follow/unfollow, latest/trending/following views, a leaderboard and contribution badges. Ranking excludes hidden content and self-likes from received-like points.
+- Owner analytics now shows top pages and recorded actions. Summary, daily analytics, accounts and health remain downloadable as owner-only CSV files; credentials and sessions are excluded.
+- Stocks and commodities now have bounded quick-select TradingView charts for major shares, gold, silver, oil and natural gas. These are chart-provider views, not a new VANTIX-owned licensed quote feed.
+- PWA assets, install metadata, a VANTIX icon and a network-first navigation service worker are prepared. API responses are never cached by the worker.
+- Live `/api/capabilities` reports OpenRouter configured. The code-level AI, account, community, analytics, exports, security and PWA checks pass locally; a signed-in production AI answer is still not verified.
+- 165 local backend, Python and interface-logic checks passed. Automated browser visual QA remains pending because the Chromium download repeatedly returned a truncated archive.
+
 ## 2026-09-19 second-exchange follow-up
 - Bybit remains unavailable in the current cloud-browser test despite matching its official public WebSocket endpoint and schema. This may be environment-specific.
 - A separate Coinbase Exchange public ticker stream is prepared for BTC, ETH, SOL, DOGE, XRP and ADA USD pairs; BNB is explicitly marked unavailable rather than guessed. Binance/Bybit USDT and Coinbase USD quotes stay separate and are never averaged.
