@@ -15,7 +15,7 @@ try:
   page.locator('#globalSearchInput').fill('');assert page.locator('#globalSearchResults').is_hidden()
   page.locator('a[data-route="/radar"]').click();page.wait_for_url('**/radar')
   page.evaluate("marketData=[{symbol:'BTC',price:60000,change:4,volume:100000,quote:'USDT',source:'fixture',status:'LIVE',updated:'now'}];applyRadarFilters()")
-  page.locator('#radarSearch').fill('BTC');page.locator('.radarRows').wait_for();page.locator('.radarRow summary').click();page.wait_for_timeout(1200);assert page.locator('.radarRow').get_attribute('open') is not None
+  page.locator('#radarSearch').fill('BTC');page.locator('.radarRows').wait_for();page.locator('.radarRow summary').click();page.evaluate('applyRadarFilters()');assert page.locator('.radarRow').get_attribute('open') is not None
   page.get_by_role('button',name='Open live chart').click();page.wait_for_url('**/crypto');assert page.locator('.chartWorkspace').count()==1
   page.goto(base+'/markets');page.wait_for_function('window.chartLoaded===true');assert page.locator('[onclick]').count()==0
   assert "script-src-attr 'none'" in page.request.get(base+'/').headers['content-security-policy']
