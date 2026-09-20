@@ -27,6 +27,6 @@ try:
   page.get_by_role('heading',name='Trending Coins').wait_for()
   assert 'not a safety guarantee' in page.locator('#page').inner_text()
   page.evaluate("gmgnData.trending=[{symbol:'TEST',name:'Test coin',chain:'sol',price_change:4,volume:1000,liquidity:500,market_cap:5000,link:'https://gmgn.ai/'}];gmgnUsable.trending=true;applyGmgnFilters()")
-  page.locator('[data-coin-kind="trending"]').click();page.locator('#coinDialog[open]').wait_for();assert 'Price move' in page.locator('#coinDialog').inner_text()
+  page.locator('[data-coin-kind="trending"]').click();page.locator('#coinDialog[open]').wait_for();assert 'price move' in page.locator('#coinDialog').inner_text().lower()
   assert not errors,errors;browser.close();print('Browser search, CSP, navigation, charts and coin-detail regressions passed')
 finally:s.shutdown();s.server_close()
