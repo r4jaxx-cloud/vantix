@@ -1,5 +1,9 @@
 # VANTIX handoff
 
+## 2026-09-19 AI invalid-response fix
+- Production logs showed `AI provider=openrouter code=INVALID_RESPONSE`, not a billing or quota error.
+- OpenRouter now targets the current free open-weight `qwen/qwen3.8-27b:free` model by default and accepts JSON wrapped in markdown or a model reasoning tag while retaining citation validation.
+
 ## 2026-09-19 community, analytics and PWA build
 - Prepared a refreshed dark-blue interface, larger controls and consistent modern cards without changing the single-page architecture.
 - Community adds follow/unfollow, latest/trending/following views, a leaderboard and contribution badges. Ranking excludes hidden content and self-likes from received-like points.
