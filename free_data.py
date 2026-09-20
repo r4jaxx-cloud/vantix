@@ -177,7 +177,7 @@ def market():
     return {'data':rows,'sources':a.get('sources',[a])+[b],'checked_at':stamp()}
 
 def news(topic='all'):
-    keys=['policy','energy','world','politics','weather'] if topic=='all' else [topic]
+    keys=['finance','policy','energy','world','politics','weather'] if topic=='all' else [topic]
     functions=[events if k=='world' else (lambda k=k:rss(k)) if k in RSS else (lambda k=k:world_news(k)) for k in keys]
     if 'world' in keys:functions.append(lambda:world_news('world'))
     results=parallel(functions);rows=[]
@@ -220,7 +220,7 @@ def token_security(chain,address):
     return {**r,'status':'EVIDENCE_RETURNED' if r['data'] and r['status']=='REPORTED' else 'UNKNOWN','message':'Provider-reported flags, not a safety verdict. No single check rules out a scam. Missing fields remain unknown.' if r['data'] and r['status']=='REPORTED' else 'Fresh security evidence unavailable. Do not treat this as a safe result.'}
 
 def world_news(topic='world'):
-    queries={'world':'(economy OR markets OR geopolitics)','politics':'(election OR government OR sanctions OR tariffs OR trade)','weather':'(hurricane OR drought OR flood OR heatwave OR storm OR climate)'}
+    queries={'finance':'(financial markets OR stocks OR bonds OR earnings OR inflation OR interest rates OR currency OR bitcoin)','world':'(economy OR markets OR geopolitics)','politics':'(election OR government OR sanctions OR tariffs OR trade)','weather':'(hurricane OR drought OR flood OR heatwave OR storm OR climate)'}
     if topic not in queries:raise ValueError('Unsupported world news topic')
     url='https://api.gdeltproject.org/api/v2/doc/doc?'+urlencode({'query':queries[topic],'mode':'artlist','format':'json','maxrecords':30,'sort':'datedesc','timespan':'24h'})
     def parse():
