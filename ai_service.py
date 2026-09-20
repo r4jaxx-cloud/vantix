@@ -6,7 +6,17 @@ from urllib.request import Request,urlopen
 from datetime import datetime,timezone
 
 AI_SLOTS=threading.BoundedSemaphore(2)
-PROVIDERS=[('nvidia','NVIDIA_API_KEY','NVIDIA_DEVELOPMENT_ENABLED','https://integrate.api.nvidia.com/v1/chat/completions','meta/llama-3.1-8b-instruct'),('openrouter','OPENROUTER_API_KEY','OPENROUTER_FREE_ONLY','https://openrouter.ai/api/v1/chat/completions','openrouter/free'),('groq','GROQ_API_KEY','GROQ_FREE_TIER_CONFIRMED','https://api.groq.com/openai/v1/chat/completions','openai/gpt-oss-20b'),('gemini','GEMINI_API_KEY','GEMINI_FREE_TIER_CONFIRMED','https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent','gemini-2.5-flash-lite')]
+PROVIDERS=[('nvidia','NVIDIA_API_KEY','NVIDIA_DEVELOPMENT_ENABLED','https://integrate.api.nvidia.com/v1/chat/completions','meta/llama-3.1-8b-instruct'),('openrouter','OPENROUTER_API_KEY','OPENROUTER_FREE_ONLY','https://openrouter.ai/api/v1/chat/completions',os.getenv('OPENROUTER_MODEL','qwen/qwen3.8-27b:free')),('groq','GROQ_API_KEY','GROQ_FREE_TIER_CONFIRMED','https://api.groq.com/openai/v1/chat/completions','openai/gpt-oss-20b'),('gemini','GEMINI_API_KEY','GEMINI_FREE_TIER_CONFIRMED','https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent','gemini-2.5-flash-lite')]
+
+def parse_json_text(value):
+ if not isinstance(value,str):raise ValueError('Invalid response')
+ text=re.sub(r'<think>[\s\S]*?</think>','',value,flags=re.I).strip()
+ text=re.sub(r'^```(?:json)?\s*|\s*```$','',text).strip()
+ try:return json.loads(text)
+ except json.JSONDecodeError:
+  start=text.find('{');end=text.rfind('}')
+  if start<0 or end<=start:raise ValueError('Invalid response')
+  return json.loads(text[start:end+1])
 
 def failure(provider,code):
  # Only allowlisted provider labels and static codes; never log exception text,
@@ -62,7 +72,7 @@ def _answer(question,uid,c,cache,history=None):
    else:
     raw=post(url,{'model':model,'messages':[{'role':'system','content':system},{'role':'user','content':user}],'max_tokens':700,'temperature':0.2,**({'response_format':{'type':'json_object'}} if name=='openrouter' else {})},{'Authorization':'Bearer '+os.environ[key]})
     text=raw['choices'][0]['message']['content']
-   text=re.sub(r'^```(?:json)?\s*|\s*```$','',text.strip());parsed=json.loads(text)
+   parsed=parse_json_text(text)
    if not isinstance(parsed,dict):raise ValueError('Invalid response')
    ids=parsed.get('source_ids');known={r['id'] for r in sources}
    if not isinstance(parsed.get('answer'),str) or not parsed['answer'].strip() or not isinstance(ids,list) or any(not isinstance(x,str) or x not in known for x in ids):
@@ -80,4 +90,3 @@ def _answer(question,uid,c,cache,history=None):
   except Exception:
    failures.append(failure(name,'PROVIDER_ERROR'))
  return {'status':'UNAVAILABLE','answer':'Configured free providers failed or reached their limits. No paid fallback was used.','sources':[],'diagnostics':failures}
-
