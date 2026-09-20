@@ -80,14 +80,15 @@ def parallel(functions):
         return [future.result() for future in futures]
 
 def binance_crypto():
-    url='https://data-api.binance.vision/api/v3/ticker/24hr?'+urlencode({'symbols':json.dumps(['BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','DOGEUSDT','XRPUSDT','ADAUSDT'],separators=(',',':'))})
+    pairs=[s+'USDT' for s in TRACKED_CRYPTO]
+    url='https://data-api.binance.vision/api/v3/ticker/24hr?'+urlencode({'symbols':json.dumps(pairs,separators=(',',':'))})
     def parse():
         raw=json.loads(fetch(url))
         if not isinstance(raw,list):raise ValueError('Expected ticker list')
-        return [{'symbol':x['symbol'][:-4],'price':number(x['lastPrice']),'change':number(x['priceChangePercent']),'volume':number(x['quoteVolume']),'quote':'USDT','source':'Binance','source_url':'https://www.binance.com/en/trade/'+x['symbol'][:-4]+'_USDT','status':'SNAPSHOT','updated':datetime.fromtimestamp(number(x['closeTime'])/1000,timezone.utc).isoformat()} for x in raw if x.get('symbol') in ('BTCUSDT','ETHUSDT','BNBUSDT','SOLUSDT','DOGEUSDT','XRPUSDT','ADAUSDT')]
+        return [{'symbol':x['symbol'][:-4],'price':number(x['lastPrice']),'change':number(x['priceChangePercent']),'volume':number(x['quoteVolume']),'quote':'USDT','source':'Binance','source_url':'https://www.binance.com/en/trade/'+x['symbol'][:-4]+'_USDT','status':'SNAPSHOT','updated':datetime.fromtimestamp(number(x['closeTime'])/1000,timezone.utc).isoformat()} for x in raw if x.get('symbol') in pairs]
     return cached('crypto-binance','Binance',url,parse,60,'SNAPSHOT')
 
-TRACKED_CRYPTO=('BTC','ETH','BNB','SOL','DOGE','XRP','ADA')
+TRACKED_CRYPTO=('BTC','ETH','BNB','SOL','DOGE','XRP','ADA','AVAX','LINK','DOT','LTC','TRX')
 
 def bybit_crypto():
     url='https://api.bybit.com/v5/market/tickers?category=spot'
@@ -176,9 +177,9 @@ def market():
     return {'data':rows,'sources':a.get('sources',[a])+[b],'checked_at':stamp()}
 
 def news(topic='all'):
-    keys=['policy','energy','world'] if topic=='all' else [topic]
-    functions=[events if k=='world' else (lambda k=k:rss(k)) for k in keys]
-    if 'world' in keys:functions.append(world_news)
+    keys=['policy','energy','world','politics','weather'] if topic=='all' else [topic]
+    functions=[events if k=='world' else (lambda k=k:rss(k)) if k in RSS else (lambda k=k:world_news(k)) for k in keys]
+    if 'world' in keys:functions.append(lambda:world_news('world'))
     results=parallel(functions);rows=[]
     for result in results:
         rows.extend({**r,'status':'STALE' if result['status']=='STALE' else r['status']} for r in result['data'])
@@ -218,8 +219,10 @@ def token_security(chain,address):
     r=cached('security-'+chain+'-'+address,'GoPlus Security',url,parse,600,'REPORTED')
     return {**r,'status':'EVIDENCE_RETURNED' if r['data'] and r['status']=='REPORTED' else 'UNKNOWN','message':'Provider-reported flags, not a safety verdict. No single check rules out a scam. Missing fields remain unknown.' if r['data'] and r['status']=='REPORTED' else 'Fresh security evidence unavailable. Do not treat this as a safe result.'}
 
-def world_news():
-    url='https://api.gdeltproject.org/api/v2/doc/doc?'+urlencode({'query':'(economy OR markets OR geopolitics OR climate)','mode':'artlist','format':'json','maxrecords':30,'sort':'datedesc','timespan':'24h'})
+def world_news(topic='world'):
+    queries={'world':'(economy OR markets OR geopolitics)','politics':'(election OR government OR sanctions OR tariffs OR trade)','weather':'(hurricane OR drought OR flood OR heatwave OR storm OR climate)'}
+    if topic not in queries:raise ValueError('Unsupported world news topic')
+    url='https://api.gdeltproject.org/api/v2/doc/doc?'+urlencode({'query':queries[topic],'mode':'artlist','format':'json','maxrecords':30,'sort':'datedesc','timespan':'24h'})
     def parse():
         raw=json.loads(fetch(url));articles=raw.get('articles')
         if not isinstance(articles,list):raise ValueError('Unexpected news response')
@@ -227,6 +230,6 @@ def world_news():
         for x in articles[:30]:
             link=safeurl(x.get('url'))
             if not link:continue
-            rows.append({'title':str(x.get('title','Untitled'))[:500],'link':link,'published':None,'seen_at':x.get('seendate'),'source':str(x.get('domain','Publisher'))+' via GDELT','category':'world','status':'INDEXED'})
+            rows.append({'title':str(x.get('title','Untitled'))[:500],'link':link,'published':None,'seen_at':x.get('seendate'),'source':str(x.get('domain','Publisher'))+' via GDELT','category':topic,'status':'INDEXED'})
         return rows
-    return cached('world-news','GDELT news index',url,parse,900,'INDEXED')
+    return cached('world-news-'+topic,'GDELT news index',url,parse,900,'INDEXED')
