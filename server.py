@@ -161,7 +161,7 @@ class H(BaseHTTPRequestHandler):
             return self.send(200,json.dumps(result))
         if p.path=='/api/news':
             topic=(q.get('topic') or ['all'])[0]
-            if topic not in ('all','world','politics','weather','energy','policy'):return self.send(400,json.dumps({'message':'Unknown news topic'}))
+            if topic not in ('all','finance','world','politics','weather','energy','policy'):return self.send(400,json.dumps({'message':'Unknown news topic'}))
             return self.send(200,json.dumps(free_data.news(topic)))
         if p.path in ('/api/economy','/api/sectors','/api/filings'):
             try:
