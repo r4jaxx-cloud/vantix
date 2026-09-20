@@ -24,6 +24,7 @@ Open http://localhost:8000. Local account registration returns a test verificati
 - Turso/libSQL remote database adapter. Production startup refuses local-only SQLite. Remote protocol is fixture-tested, not connected to a real account.
 - AI: OpenRouter `qwen/qwen3.8-27b:free` by default (overridable with `OPENROUTER_MODEL`), optional Groq `openai/gpt-oss-20b`, optional Gemini `gemini-2.5-flash-lite`; NVIDIA `meta/llama-3.1-8b-instruct` in development only. Keys and explicit free-account flags are required.
 - AI receives the user-confirmed question plus matching retrieved public data only. It validates cited source IDs, labels interpretation and offers source search without AI. Citation validation does not prove model accuracy.
+- If every free AI provider is rate-limited or unavailable, Ask VANTIX returns a clearly labelled deterministic summary of matching VANTIX source records. This keeps source lookup usable but is not AI interpretation.
 - Daily AI caps: 10 requests per user, 20 attempts per provider across the site. Maximum two simultaneous AI requests and three provider attempts per question. No paid model routing or account upgrades.
 - Request bounds, network timeouts, shared data caching and one refresh per source. These reduce overload risk; they do not establish a tested visitor capacity.
 
@@ -81,4 +82,4 @@ Additional official source documentation:
 - https://docs.gopluslabs.io/reference/tokensecurityusingget_1
 - https://blog.gdeltproject.org/gdelt-doc-2-0-api-debuts/
 
-New integrations are fixture-tested, not live-validated. A provider requiring authentication or denying a request remains unavailable; no paid subscription or credentials are obtained automatically.
+New integrations are fixture-tested, not live-validated. A provider requiring authentication or denying a request remains unavailable; no paid subscription or credentials are obtained automatically. Selected market-analysis principles are adapted from the MIT-licensed Agency Agents finance framework; see `THIRD_PARTY_NOTICES.md`.
