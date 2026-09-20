@@ -15,7 +15,7 @@ def ck(label,condition):
  assert condition,label
  checks.append(label)
 try:
- for path in ['/','/markets','/crypto','/trending','/forex','/stocks','/commodities','/economy','/news','/feed','/shield','/radar','/watchlist','/alerts','/research','/copilot','/sectors','/portfolio']:
+ for path in ['/','/markets','/crypto','/trending','/flows','/forex','/stocks','/commodities','/economy','/news','/feed','/shield','/radar','/watchlist','/alerts','/research','/copilot','/sectors','/portfolio']:
   ck('Route '+path,call(path)[0]==200)
  ck('Unknown page is 404',call('/page-does-not-exist')[0]==404)
  ck('Invalid email rejected',call('/api/auth/register',{'email':'bad\n@example.test','password':'password123'})[0]==400)
