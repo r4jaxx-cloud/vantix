@@ -159,5 +159,5 @@ def post(h,path,b,c,u,hashpw):
    return 400,{'message':'Conversation context is invalid. Refresh and try again.'}
   history=[{'role':x['role'],'content':x['content']} for x in history]
   with free_data.LOCK:cache=dict(free_data.CACHE)
-  result=ai_service.answer(question,uid,c,cache,history);record(c,uid,'ai_request');return (200 if result['status']=='AI_INTERPRETATION' else 503),result
+  result=ai_service.answer(question,uid,c,cache,history);record(c,uid,'ai_request');return (200 if result['status'] in ('AI_INTERPRETATION','SOURCE_FALLBACK') else 503),result
  return None
