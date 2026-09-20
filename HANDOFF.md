@@ -4,7 +4,7 @@
 - Production logs confirmed OpenRouter HTTP 429 rate limiting after the response-format fix deployed.
 - When configured free providers fail, Ask VANTIX now returns a clearly labelled deterministic source summary instead of a generic 503. It never presents the fallback as AI interpretation or uses a paid provider.
 - The market-analysis prompt now applies selected evidence, assumptions, balanced-scenario and limitation principles adapted from the MIT-licensed Agency Agents finance framework. None of that repository's installer or conversion scripts are bundled or executed.
-- The interface component refresh groups navigation by purpose and updates page headers, cards, actions, status pills and responsive surfaces without changing route behavior.
+- The interface component refresh groups navigation by purpose and uses a restrained professional finance theme: flat navy/graphite surfaces, minimal blue accents, compact typography and reduced rounding/effects without changing route behavior.
 
 ## 2026-09-19 AI invalid-response fix
 - Production logs showed `AI provider=openrouter code=INVALID_RESPONSE`, not a billing or quota error.
