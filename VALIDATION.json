@@ -1,10 +1,11 @@
 {
-  "passed": 49,
+  "passed": 50,
   "checks": [
     "Route /",
     "Route /markets",
     "Route /crypto",
     "Route /trending",
+    "Route /flows",
     "Route /forex",
     "Route /stocks",
     "Route /commodities",
