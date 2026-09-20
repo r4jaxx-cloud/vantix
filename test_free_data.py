@@ -48,7 +48,7 @@ class ProviderConcurrency(unittest.TestCase):
   started=time.monotonic()
   with patch.object(d,'rss',side_effect=lambda topic:self.slow(topic)),patch.object(d,'events',side_effect=lambda:self.slow('events')),patch.object(d,'world_news',side_effect=lambda topic='world':self.slow(topic)):
    response=d.news()
-  self.assertEqual(len(response['sources']),6);self.assertLess(time.monotonic()-started,0.3)
+  self.assertEqual(len(response['sources']),7);self.assertLess(time.monotonic()-started,0.3)
  def test_market_groups_do_not_delay_each_other(self):
   started=time.monotonic()
   crypto=lambda:(time.sleep(0.1) or {**self.slow('crypto'),'status':'SNAPSHOT','sources':[]})
