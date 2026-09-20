@@ -138,6 +138,13 @@ class Providers(unittest.TestCase):
    self.assertEqual(result['status'],'AI_INTERPRETATION');self.assertEqual(result['mode'],'GENERAL');self.assertEqual(result['sources'],[])
    self.assertEqual(req.call_args.args[1]['response_format'],{'type':'json_object'})
    self.assertIn('never invent current prices',req.call_args.args[1]['messages'][0]['content'])
+ def test_openrouter_accepts_reasoning_wrapper_and_uses_specific_free_model(self):
+  content='<think>private reasoning</think>\n```json\n{"answer":"A bond is debt.","source_ids":[],"limitations":"General knowledge."}\n```'
+  raw={'choices':[{'message':{'content':content}}]}
+  with patch.dict(os.environ,{'OPENROUTER_API_KEY':'test','OPENROUTER_FREE_ONLY':'1'},clear=True),patch('ai_service.post',return_value=raw) as req:
+   result=ai_service.answer('What is a bond?',1,self.c,{})
+   self.assertEqual(result['status'],'AI_INTERPRETATION')
+   self.assertEqual(req.call_args.args[1]['model'],'qwen/qwen3.8-27b:free')
  def test_followup_includes_history_and_original_asset_evidence(self):
   raw={'choices':[{'message':{'content':json.dumps({'answer':'BTC observation [S1]','source_ids':['S1'],'limitations':''})}}]}
   history=[{'role':'user','content':'BTC'},{'role':'assistant','content':'A previous explanation'}]
