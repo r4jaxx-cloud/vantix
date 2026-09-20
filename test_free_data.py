@@ -46,9 +46,9 @@ class ProviderConcurrency(unittest.TestCase):
   time.sleep(0.1);return {'data':[],'source':source,'source_url':'https://example.test','status':'PUBLISHED','checked_at':'2026-09-13T00:00:00+00:00','retrieved_at':None,'message':None,'error_code':None}
  def test_news_sources_do_not_delay_each_other(self):
   started=time.monotonic()
-  with patch.object(d,'rss',side_effect=lambda topic:self.slow(topic)),patch.object(d,'events',side_effect=lambda:self.slow('events')),patch.object(d,'world_news',side_effect=lambda:self.slow('world')):
+  with patch.object(d,'rss',side_effect=lambda topic:self.slow(topic)),patch.object(d,'events',side_effect=lambda:self.slow('events')),patch.object(d,'world_news',side_effect=lambda topic='world':self.slow(topic)):
    response=d.news()
-  self.assertEqual(len(response['sources']),4);self.assertLess(time.monotonic()-started,0.3)
+  self.assertEqual(len(response['sources']),6);self.assertLess(time.monotonic()-started,0.3)
  def test_market_groups_do_not_delay_each_other(self):
   started=time.monotonic()
   crypto=lambda:(time.sleep(0.1) or {**self.slow('crypto'),'status':'SNAPSHOT','sources':[]})
