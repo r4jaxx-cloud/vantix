@@ -14,7 +14,7 @@ INFLIGHT=set()
 LOCK=threading.RLock()
 COUNTRIES={'GBR':'United Kingdom','USA':'United States','CHN':'China','DEU':'Germany','JPN':'Japan','IND':'India','WLD':'World'}
 INDICATORS={'NY.GDP.MKTP.KD.ZG':'GDP growth (%)','FP.CPI.TOTL.ZG':'Consumer inflation (%)','SL.UEM.TOTL.ZS':'Unemployment (%)','NV.AGR.TOTL.ZS':'Agriculture value added (% GDP)','NV.IND.TOTL.ZS':'Industry value added (% GDP)','NV.SRV.TOTL.ZS':'Services value added (% GDP)'}
-RSS={'policy':('Federal Reserve','https://www.federalreserve.gov/feeds/press_all.xml'),'energy':('US EIA','https://www.eia.gov/rss/todayinenergy.xml')}
+RSS={'policy':('Federal Reserve','https://www.federalreserve.gov/feeds/press_all.xml'),'energy':('US EIA','https://www.eia.gov/rss/todayinenergy.xml'),'finance_sec':('US SEC','https://www.sec.gov/news/pressreleases.rss'),'finance_boe':('Bank of England','https://www.bankofengland.co.uk/rss/news'),'finance_ecb':('European Central Bank','https://www.ecb.europa.eu/rss/press.html')}
 
 def stamp():return datetime.now(timezone.utc).isoformat()
 def safeurl(value):
@@ -131,10 +131,11 @@ def forex():
 
 def rss(topic):
     source,url=RSS[topic]
+    category='finance' if topic.startswith('finance_') else topic
     def parse():
         root=ET.fromstring(fetch(url));items=root.findall('./channel/item')
         if root.tag!='rss':raise ValueError('Expected RSS')
-        return [{'title':i.findtext('title') or 'Untitled release','link':safeurl(i.findtext('link')),'published':i.findtext('pubDate') or None,'source':source,'category':topic,'status':'PUBLISHED'} for i in items[:30]]
+        return [{'title':i.findtext('title') or 'Untitled release','link':safeurl(i.findtext('link')),'published':i.findtext('pubDate') or None,'source':source,'category':category,'status':'PUBLISHED'} for i in items[:30]]
     return cached(topic,source,url,parse,300,'PUBLISHED')
 
 def events():
@@ -177,7 +178,7 @@ def market():
     return {'data':rows,'sources':a.get('sources',[a])+[b],'checked_at':stamp()}
 
 def news(topic='all'):
-    keys=['finance','policy','energy','world','politics','weather'] if topic=='all' else [topic]
+    keys=['finance_sec','finance_boe','finance_ecb','finance','policy','energy','world','politics','weather'] if topic=='all' else ['finance_sec','finance_boe','finance_ecb','finance'] if topic=='finance' else [topic]
     functions=[events if k=='world' else (lambda k=k:rss(k)) if k in RSS else (lambda k=k:world_news(k)) for k in keys]
     if 'world' in keys:functions.append(lambda:world_news('world'))
     results=parallel(functions);rows=[]
