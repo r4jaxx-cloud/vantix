@@ -14,7 +14,7 @@ try:
   page.locator('#globalSearchInput').fill('bitcoin');page.locator('#globalSearchResults').wait_for();assert 'Bitcoin' in page.locator('#globalSearchResults').inner_text()
   page.locator('#globalSearchInput').fill('');assert page.locator('#globalSearchResults').is_hidden()
   page.locator('a[data-route="/radar"]').click();page.wait_for_url('**/radar')
-  persisted=page.evaluate("""marketData=[{symbol:'BTC',price:60000,change:4,volume:100000,quote:'USDT',source:'fixture',status:'LIVE',updated:'now'}];applyRadarFilters();document.querySelector('.radarRow').open=true;applyRadarFilters();return document.querySelector('.radarRow').open""");assert persisted
+  persisted=page.evaluate("""()=>{marketData=[{symbol:'BTC',price:60000,change:4,volume:100000,quote:'USDT',source:'fixture',status:'LIVE',updated:'now'}];applyRadarFilters();document.querySelector('.radarRow').open=true;applyRadarFilters();return document.querySelector('.radarRow').open}""");assert persisted
   page.get_by_role('button',name='Open live chart').click();page.wait_for_url('**/crypto');assert page.locator('.chartWorkspace').count()==1
   page.goto(base+'/markets');page.wait_for_function('window.chartLoaded===true');assert page.locator('[onclick]').count()==0
   assert "script-src-attr 'none'" in page.request.get(base+'/').headers['content-security-policy']
