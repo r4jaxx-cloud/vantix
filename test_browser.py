@@ -11,7 +11,7 @@ try:
   browser=p.chromium.launch();page=browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
   page.route('https://s3.tradingview.com/**',lambda r:r.fulfill(content_type='application/javascript',body='window.chartLoaded=true;'))
   page.goto(base+'/');page.get_by_role('button',name='Open Market Radar',exact=True).click();page.wait_for_url('**/radar')
-  page.get_by_label('SEARCH').fill('BTC');page.locator('.radarRows').wait_for()
+  page.locator('#radarSearch').fill('BTC');page.locator('.radarRows').wait_for()
   page.goto(base+'/markets');page.wait_for_function('window.chartLoaded===true');assert page.locator('[onclick]').count()==0
   assert "script-src-attr 'none'" in page.request.get(base+'/').headers['content-security-policy']
   page.evaluate("document.body.insertAdjacentHTML('beforeend','<img src=x onerror=\"window.injected=true\">')")
