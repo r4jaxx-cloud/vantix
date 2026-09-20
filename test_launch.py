@@ -122,6 +122,7 @@ class Providers(unittest.TestCase):
    with self.subTest(code=code),patch.dict(os.environ,env,clear=True),patch('ai_service.post',side_effect=error),patch('ai_service.operations.fault') as fault,self.assertLogs('vantix.ai',level='WARNING') as logs:
     result=ai_service.answer('BTC',1,self.c,self.cache)
     self.assertEqual(result['diagnostics'],[{'provider':'openrouter','code':code}])
+    self.assertEqual(result['status'],'SOURCE_FALLBACK')
     self.assertNotIn('secret-fixture',json.dumps(result)+str(logs.output))
     fault.assert_called_with('ai-openrouter',code)
  def test_ai_site_cap_does_not_call_provider(self):
@@ -164,7 +165,19 @@ class Providers(unittest.TestCase):
    self.assertNotIn('password',json.dumps(req.call_args.args[1]));self.assertEqual(result['sources'][0]['source_url'],'https://example.test/source')
  def test_unknown_citation_rejected(self):
   raw={'choices':[{'message':{'content':'{"answer":"invented","source_ids":["S99"]}'}}]}
-  with patch.dict(os.environ,{'OPENROUTER_API_KEY':'test','OPENROUTER_FREE_ONLY':'1'},clear=True),patch('ai_service.post',return_value=raw):self.assertEqual(ai_service.answer('BTC',1,self.c,self.cache)['status'],'UNAVAILABLE')
+  with patch.dict(os.environ,{'OPENROUTER_API_KEY':'test','OPENROUTER_FREE_ONLY':'1'},clear=True),patch('ai_service.post',return_value=raw):self.assertEqual(ai_service.answer('BTC',1,self.c,self.cache)['status'],'SOURCE_FALLBACK')
+ def test_provider_limit_returns_source_fallback_without_inventing(self):
+  error=HTTPError('https://example.test',429,'rate limit',{},None)
+  with patch.dict(os.environ,{'OPENROUTER_API_KEY':'test','OPENROUTER_FREE_ONLY':'1'},clear=True),patch('ai_service.post',side_effect=error):
+   result=ai_service.answer('BTC',1,self.c,self.cache)
+  self.assertEqual(result['status'],'SOURCE_FALLBACK');self.assertEqual(result['mode'],'SOURCE_FALLBACK')
+  self.assertEqual(result['provider'],'VANTIX sources');self.assertIn('[S1]',result['answer'])
+ def test_provider_limit_without_evidence_is_clear(self):
+  error=HTTPError('https://example.test',429,'rate limit',{},None)
+  with patch.dict(os.environ,{'OPENROUTER_API_KEY':'test','OPENROUTER_FREE_ONLY':'1'},clear=True),patch('ai_service.post',side_effect=error):
+   result=ai_service.answer('Explain duration risk',1,self.c,{})
+  self.assertEqual(result['status'],'SOURCE_FALLBACK');self.assertEqual(result['sources'],[])
+  self.assertIn('no matching current source',result['answer'])
  def test_stale_evidence_excluded(self):
   self.cache['crypto']['retrieved_at']='2000-01-01T00:00:00+00:00';self.assertEqual(ai_service.evidence(self.cache,'BTC'),[])
  def test_atomic_quota(self):
