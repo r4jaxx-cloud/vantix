@@ -193,7 +193,7 @@ def news(topic='all'):
     return {'data':rows[:60],'sources':results,'checked_at':stamp()}
 
 def token_pairs(chain,address):
-    if chain not in ('bsc','ethereum','solana'):raise ValueError('Choose BNB Chain, Ethereum or Solana')
+    if chain not in ('bsc','ethereum','solana','base'):raise ValueError('Choose BNB Chain, Ethereum, Solana or Base')
     if not re.fullmatch(r'0x[a-fA-F0-9]{40}' if chain!='solana' else r'[1-9A-HJ-NP-Za-km-z]{32,44}',address):raise ValueError('Enter a valid token address for the selected chain')
     url='https://api.dexscreener.com/token-pairs/v1/'+chain+'/'+address
     def parse():
