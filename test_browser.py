@@ -13,7 +13,7 @@ try:
   page.goto(base+'/');assert page.locator('#globalSearchResults').is_hidden()
   page.locator('#globalSearchInput').fill('bitcoin');page.locator('#globalSearchResults').wait_for();assert 'Bitcoin' in page.locator('#globalSearchResults').inner_text()
   page.locator('#globalSearchInput').fill('');assert page.locator('#globalSearchResults').is_hidden()
-  page.get_by_role('link',name='Market Radar',exact=True).click();page.wait_for_url('**/radar')
+  page.locator('a[data-route="/radar"]').click();page.wait_for_url('**/radar')
   page.locator('#radarSearch').fill('BTC');page.locator('.radarRows').wait_for()
   page.goto(base+'/markets');page.wait_for_function('window.chartLoaded===true');assert page.locator('[onclick]').count()==0
   assert "script-src-attr 'none'" in page.request.get(base+'/').headers['content-security-policy']
