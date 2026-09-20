@@ -10,7 +10,7 @@ try:
  with sync_playwright() as p:
   browser=p.chromium.launch();page=browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
   page.route('https://s3.tradingview.com/**',lambda r:r.fulfill(content_type='application/javascript',body='window.chartLoaded=true;'))
-  page.goto(base+'/');page.get_by_role('button',name='World news',exact=True).click();page.wait_for_url('**/news')
+  page.goto(base+'/');page.get_by_role('button',name='Read latest news',exact=True).click();page.wait_for_url('**/news')
   page.goto(base+'/markets');page.wait_for_function('window.chartLoaded===true');assert page.locator('[onclick]').count()==0
   assert "script-src-attr 'none'" in page.request.get(base+'/').headers['content-security-policy']
   page.evaluate("document.body.insertAdjacentHTML('beforeend','<img src=x onerror=\"window.injected=true\">')")
