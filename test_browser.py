@@ -17,6 +17,23 @@ try:
   persisted=page.evaluate("""()=>{marketData=[{symbol:'BTC',price:60000,change:4,volume:100000,quote:'USDT',source:'fixture',status:'LIVE',updated:'now'}];applyRadarFilters();document.querySelector('.radarRow').open=true;applyRadarFilters();return document.querySelector('.radarRow').open}""");assert persisted
   page.get_by_role('button',name='Open live chart').click();page.wait_for_url('**/crypto');assert page.locator('.chartWorkspace').count()==1
   page.goto(base+'/markets');page.wait_for_function('window.chartLoaded===true');assert page.locator('[onclick]').count()==0
+  page.locator('#chartSearch').fill('ethereum');assert page.locator('#chartAsset option').count()==1
+  page.get_by_role('button',name='+ Compare',exact=True).click();assert page.locator('.chartCard').count()==2
+  page.locator('#chartStyle').select_option('2');assert page.locator('.chartHost script').first.text_content().find('"style":"2"')>=0
+  page.locator('.chartCard').first.get_by_role('button',name='Price alert',exact=True).click()
+  page.locator('#quickAlertPrice').fill('90000')
+  page.route('**/api/saved/add',lambda r:r.fulfill(content_type='application/json',body='{"ok":true}'))
+  with page.expect_request('**/api/saved/add') as save:
+   page.get_by_role('button',name='Save alert',exact=True).click()
+  assert save.value.post_data_json=={'kind':'alerts','symbol':'BTC','value':90000}
+  page.get_by_text('Alert saved. View it on your Alerts page.',exact=True).wait_for()
+  page.locator('#marketToolDialog').get_by_role('button',name='Close',exact=True).click()
+  page.evaluate("newsData=[{title:'Bitcoin policy update',source:'Fixture',category:'finance',link:'https://example.com',published:'now',status:'PUBLISHED'}]")
+  page.locator('.chartCard').first.get_by_role('button',name='Related news',exact=True).click()
+  page.locator('#marketToolDialog').get_by_role('button',name='Bitcoin policy update',exact=False).click()
+  assert page.locator('#marketToolDialog').get_by_text('Headline-only source record.',exact=False).is_visible()
+  assert page.url==base+'/markets'
+  page.locator('#marketToolDialog').get_by_role('button',name='Close',exact=True).click()
   assert "script-src-attr 'none'" in page.request.get(base+'/').headers['content-security-policy']
   page.evaluate("document.body.insertAdjacentHTML('beforeend','<img src=x onerror=\"window.injected=true\">')")
   page.wait_for_timeout(100);assert page.evaluate('window.injected!==true')
