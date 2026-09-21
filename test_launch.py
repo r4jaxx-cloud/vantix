@@ -99,7 +99,7 @@ class Launch(unittest.TestCase):
   self.assertFalse(self.call('/api/auth/me',cookie=cookie)[1]['authenticated'])
  def test_threshold_deduplication(self):
   self.call('/api/saved/add',{'kind':'alerts','symbol':'BTC','value':10},self.member)
-  fixture={'status':'SNAPSHOT','data':[{'symbol':'BTC','price':11,'source':'fixture','updated':server.iso(server.now())}]}
+  fixture={'status':'SNAPSHOT','data':[{'symbol':'BTC','quote':'USDT','price':11,'source':'fixture','updated':server.iso(server.now())}]}
   with patch.dict(free_data.CACHE,{'crypto':fixture},clear=True):
    first=self.call('/api/notifications',cookie=self.member)[1]['data'];second=self.call('/api/notifications',cookie=self.member)[1]['data']
    self.assertEqual(len(first),1);self.assertEqual(len(second),1)
@@ -200,4 +200,53 @@ class Providers(unittest.TestCase):
    self.assertEqual(free_data.cached('slow','fixture','https://example.test',slow)['status'],'REFRESHING')
    self.assertEqual(free_data.cached('other','fixture','https://example.test',lambda:[])['status'],'EMPTY')
   finally:release.set();t.join()
+
+class AlertEvaluation(unittest.TestCase):
+ def setUp(self):
+  import launch_features
+  self.features=launch_features
+  self.c=sqlite3.connect(':memory:');self.c.row_factory=sqlite3.Row
+  self.c.executescript(Path(__file__).with_name('launch_schema.sql').read_text())
+  for uid in (1,2):self.c.execute("INSERT INTO users(id,email,password_hash,verified,created_at) VALUES(?,?,?,1,?)",(uid,str(uid)+'@example.test','fixture',server.iso(server.now())))
+  for uid in (1,2):self.c.execute("INSERT INTO saved_items(user_id,kind,symbol,value,created_at) VALUES(?,'alerts','BTC',10,?)",(uid,server.iso(server.now())))
+  self.c.commit()
+  self.quote={'symbol':'BTC','quote':'USDT','price':11,'source':'fixture','updated':server.iso(server.now())}
+  self.fixture={'status':'SNAPSHOT','data':[self.quote]}
+  self.cache=patch.dict(free_data.CACHE,{'crypto':self.fixture},clear=True);self.cache.start()
+ def tearDown(self):self.cache.stop();self.c.close()
+ def test_records_absent_users_and_rearms(self):
+  self.assertEqual(self.features.evaluate_alerts(self.c),2)
+  self.assertEqual(self.features.evaluate_alerts(self.c),0)
+  self.quote['price']=9;self.assertEqual(self.features.evaluate_alerts(self.c),0)
+  self.quote['price']=12;self.assertEqual(self.features.evaluate_alerts(self.c),2)
+ def test_rejects_stale_wrong_currency_and_invalid_quotes(self):
+  for key,value in [('updated','2000-01-01T00:00:00+00:00'),('quote','USD'),('price',float('nan')),('status','STALE')]:
+   with patch.dict(self.quote,{key:value}):self.assertEqual(self.features.evaluate_alerts(self.c),0)
+  self.fixture['status']='STALE';self.assertEqual(self.features.evaluate_alerts(self.c),0)
+ def test_scopes_reads_and_preserves_new_arrivals(self):
+  self.assertEqual(self.features.evaluate_alerts(self.c,1),1)
+  user={'id':1,'verified':1}
+  _,response=self.features.get(None,'/api/notifications',{},self.c,user)
+  self.assertEqual(response['unread'],1);through=response['data'][0]['id']
+  self.quote['price']=9;self.features.evaluate_alerts(self.c)
+  self.quote['price']=11;self.features.evaluate_alerts(self.c)
+  status,_=self.features.post(None,'/api/notifications/read',{'through':through},self.c,user,None)
+  self.assertEqual(status,200)
+  self.assertEqual(self.c.execute('SELECT count(*) FROM notifications WHERE user_id=1 AND read=0').fetchone()[0],1)
+  self.assertEqual(self.c.execute('SELECT count(*) FROM notifications WHERE user_id=2 AND read=0').fetchone()[0],1)
+ def test_monitor_runs_alerts_without_browser(self):
+  import operations
+  class KeepOpen:
+   def __getattr__(proxy,name):return getattr(self.c,name)
+   def close(proxy):pass
+  operations.cycle(lambda:KeepOpen(),{'fixture':lambda:{'status':'SNAPSHOT'}})
+  self.assertEqual(self.c.execute('SELECT count(*) FROM notifications').fetchone()[0],2)
+ def test_unverified_and_banned_users_skipped(self):
+  self.c.execute('UPDATE users SET verified=0 WHERE id=1')
+  self.c.execute("INSERT INTO profiles(user_id,display_name,banned) VALUES(2,'Fixture',1)");self.c.commit()
+  self.assertEqual(self.features.evaluate_alerts(self.c),0)
+ def test_unsupported_alert_rejected(self):
+  status,_=self.features.post(None,'/api/saved/add',{'kind':'alerts','symbol':'AAPL','value':10},self.c,{'id':1,'verified':1},None)
+  self.assertEqual(status,400)
+
 if __name__=='__main__':unittest.main()
