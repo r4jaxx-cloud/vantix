@@ -27,3 +27,13 @@ CREATE INDEX IF NOT EXISTS operation_date ON operation_runs(created_at);
 
 
 CREATE TABLE IF NOT EXISTS security_audit(id INTEGER PRIMARY KEY,event TEXT NOT NULL,user_id INTEGER,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS chat_groups(id INTEGER PRIMARY KEY,owner_id INTEGER NOT NULL,name TEXT NOT NULL,created_at TEXT NOT NULL);
+CREATE TABLE IF NOT EXISTS chat_members(group_id INTEGER NOT NULL,user_id INTEGER NOT NULL,PRIMARY KEY(group_id,user_id));
+CREATE INDEX IF NOT EXISTS chat_member_user ON chat_members(user_id,group_id);
+CREATE TABLE IF NOT EXISTS chat_messages(id INTEGER PRIMARY KEY,sender_id INTEGER NOT NULL,recipient_id INTEGER,group_id INTEGER,body TEXT NOT NULL,client_id TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(sender_id,client_id),CHECK((recipient_id IS NULL) <> (group_id IS NULL)));
+CREATE INDEX IF NOT EXISTS chat_message_group ON chat_messages(group_id,id);
+CREATE INDEX IF NOT EXISTS chat_message_recipient ON chat_messages(recipient_id,sender_id,id);
+CREATE INDEX IF NOT EXISTS chat_message_sender ON chat_messages(sender_id,recipient_id,id);
+CREATE TABLE IF NOT EXISTS chat_blocks(user_id INTEGER NOT NULL,blocked_id INTEGER NOT NULL,PRIMARY KEY(user_id,blocked_id));
+CREATE TABLE IF NOT EXISTS chat_reads(user_id INTEGER NOT NULL,thread TEXT NOT NULL,through INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(user_id,thread));
+CREATE TABLE IF NOT EXISTS social_profiles(user_id INTEGER PRIMARY KEY,handle TEXT UNIQUE NOT NULL,bio TEXT NOT NULL DEFAULT '');
