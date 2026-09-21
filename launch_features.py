@@ -1,5 +1,5 @@
 import security
-import os,json,re,math,secrets,hashlib
+import os,json,re,math,secrets,hashlib,threading
 from datetime import datetime,timezone,timedelta
 import ai_service,mail_service,free_data
 
@@ -16,6 +16,47 @@ def community_rows(c,viewer=0):
  out.sort(key=lambda x:(-x['points'],-x['followers'],x['id']))
  for i,x in enumerate(out[:25],1):x['rank']=i
  return out[:25]
+ALERT_LOCK=threading.Lock()
+def evaluate_alerts(c,user_id=None):
+ """Record observed crossings atomically, including users with no open browser."""
+ with ALERT_LOCK:
+  with free_data.LOCK:source=free_data.CACHE.get('crypto',{}).copy()
+  if source.get('status')!='SNAPSHOT':return 0
+  quotes={}
+  for quote in source.get('data',[]):
+   try:
+    age=(datetime.now(timezone.utc)-datetime.fromisoformat(quote['updated'])).total_seconds()
+    price=float(quote['price'])
+    if not 0<=age<=180 or not math.isfinite(price) or price<=0 or quote.get('quote')!='USDT' or quote.get('status','SNAPSHOT')!='SNAPSHOT':continue
+    quotes[quote['symbol']]=quote
+   except (ValueError,TypeError,KeyError):continue
+  if not quotes:return 0
+  after=0;created=0
+  while True:
+   args=[after]
+   scope=''
+   if user_id is not None:scope=' AND s.user_id=?';args.append(user_id)
+   rows=c.execute("SELECT s.id,s.user_id,s.symbol,s.value,a.above FROM saved_items s JOIN users u ON u.id=s.user_id LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN alert_state a ON a.item_id=s.id WHERE s.kind='alerts' AND u.verified=1 AND coalesce(p.banned,0)=0 AND s.id>?"+scope+" ORDER BY s.id LIMIT 500",tuple(args)).fetchall()
+   if not rows:break
+   for rule in rows:
+    after=rule['id'];quote=quotes.get(rule['symbol'])
+    if not quote:continue
+    try:threshold=float(rule['value'])
+    except (ValueError,TypeError):continue
+    if not math.isfinite(threshold) or threshold<=0:continue
+    above=int(float(quote['price'])>=threshold)
+    if rule['above'] is not None and rule['above']==above:continue
+    try:
+     # First write takes the database transaction lock; RETURNING claims one transition.
+     c.execute("INSERT OR IGNORE INTO alert_state(item_id,above) SELECT id,0 FROM saved_items WHERE id=? AND kind='alerts'",(rule['id'],))
+     changed=c.execute('UPDATE alert_state SET above=? WHERE item_id=? AND above<>? RETURNING item_id',(above,rule['id'],above)).fetchone()
+     if changed and above:
+      c.execute("INSERT INTO notifications(user_id,message,source,observed_at,created_at) SELECT user_id,?,?,?,? FROM saved_items WHERE id=? AND kind='alerts'",(rule['symbol']+' reached your threshold of '+str(rule['value'])+' USDT',quote.get('source','Provider'),quote['updated'],ts(),rule['id']))
+      created+=1
+     c.commit()
+    except Exception:c.rollback();raise
+  return created
+
 def get(h,path,q,c,u):
  if path=='/api/capabilities':return 200,{'support_email':os.getenv('SUPPORT_EMAIL',''),'ai_configured':bool(ai_service.enabled()),'ai_providers':[p[0] for p in ai_service.enabled()],'persistent_storage':bool(os.getenv('LIBSQL_URL')),'email_configured':mail_service.configured(),'mode':'public' if os.getenv('VANTIX_ENV')=='production' else 'local'}
  if path=='/api/profile':
@@ -31,21 +72,9 @@ def get(h,path,q,c,u):
   return 200,{'data':[dict(r) for r in c.execute('SELECT id,kind,symbol,value,created_at FROM saved_items WHERE user_id=? AND kind=? ORDER BY id DESC LIMIT 500',(u['id'],kind)).fetchall()]}
  if path=='/api/notifications':
   if not u:return 401,{'message':'Sign in to view notifications.'}
-  # Evaluate observed thresholds while the user is online. No always-on delivery claim.
-  rows=c.execute("SELECT id,symbol,value FROM saved_items WHERE user_id=? AND kind='alerts'",(u['id'],)).fetchall()
-  with free_data.LOCK:source=free_data.CACHE.get('crypto',{}).copy()
-  if source.get('status')=='SNAPSHOT':
-   for rule in rows:
-    quote=next((x for x in source.get('data',[]) if x['symbol']==rule['symbol']),None)
-    if not quote:continue
-    try:age=(datetime.now(timezone.utc)-datetime.fromisoformat(quote['updated'])).total_seconds()
-    except Exception:continue
-    if age<0 or age>180:continue
-    above=int(quote['price']>=rule['value']);old=c.execute('SELECT above FROM alert_state WHERE item_id=?',(rule['id'],)).fetchone()
-    if above and (not old or not old['above']):c.execute('INSERT INTO notifications(user_id,message,source,observed_at,created_at) VALUES(?,?,?,?,?)',(u['id'],rule['symbol']+' reached your threshold of '+str(rule['value'])+' USDT',quote['source'],quote['updated'],ts()))
-    c.execute('INSERT INTO alert_state(item_id,above) VALUES(?,?) ON CONFLICT(item_id) DO UPDATE SET above=excluded.above',(rule['id'],above))
-   c.commit()
-  return 200,{'data':[dict(r) for r in c.execute('SELECT id,message,source,observed_at,created_at,read FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 100',(u['id'],)).fetchall()]}
+  evaluate_alerts(c,u['id'])
+  return 200,{'data':[dict(r) for r in c.execute('SELECT id,message,source,observed_at,created_at,read FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 100',(u['id'],)).fetchall()],'unread':c.execute('SELECT count(*) n FROM notifications WHERE user_id=? AND read=0',(u['id'],)).fetchone()['n']}
+
  if path=='/api/admin':
   if not admin(u):return 403,{'message':'Owner access required.'}
   def count(sql,args=()):return c.execute(sql,args).fetchone()['n']
@@ -103,6 +132,7 @@ def post(h,path,b,c,u,hashpw):
  if path=='/api/saved/add':
   kind=b.get('kind');symbol=str(b.get('symbol','')).strip().upper();value=b.get('value')
   if not valid_kind(kind) or not re.fullmatch(r'[A-Z0-9/._-]{1,24}',symbol):return 400,{'message':'Invalid collection or symbol.'}
+  if kind=='alerts' and symbol not in free_data.TRACKED_CRYPTO:return 400,{'message':'Alerts currently support: '+', '.join(free_data.TRACKED_CRYPTO)+'. Thresholds use USDT.'}
   if kind!='watchlist':
    try:value=float(value)
    except (TypeError,ValueError):return 400,{'message':'Enter a numeric value.'}
@@ -117,7 +147,9 @@ def post(h,path,b,c,u,hashpw):
   if not owned:return 404,{'message':'Item not found.'}
   c.execute('DELETE FROM alert_state WHERE item_id=?',(item,));c.execute('DELETE FROM saved_items WHERE id=? AND user_id=?',(item,uid));c.commit();return 200,{'ok':True}
  if path=='/api/notifications/read':
-  c.execute('UPDATE notifications SET read=1 WHERE user_id=?',(uid,));c.commit();return 200,{'ok':True}
+  through=b.get('through')
+  if not isinstance(through,int) or isinstance(through,bool) or through<1:return 400,{'message':'Choose notifications to mark read.'}
+  c.execute('UPDATE notifications SET read=1 WHERE user_id=? AND id<=?',(uid,through));c.commit();return 200,{'ok':True}
  if path=='/api/feed/reaction':
   try:pid=int(b.get('post_id',0))
   except (ValueError,TypeError):return 400,{'message':'Invalid post.'}

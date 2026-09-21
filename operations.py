@@ -14,7 +14,7 @@ def fault(area,code):
 def snapshot():
  with LOCK:result={**STATE,'checks':{k:dict(v) for k,v in STATE['checks'].items()},'errors':list(STATE['errors'])}
  result['running']=bool(THREAD and THREAD.is_alive())
- result['note']='Runs only while this server is awake. Retries public reads with backoff; never modifies code or repeats account writes. This is not an external uptime monitor.'
+ result['note']='Runs only while this server is awake. Retries public reads with backoff; records price alerts; never modifies code. This is not an external uptime monitor.'
  return result
 
 def cycle(connect,tasks=None,clock=time.monotonic):
@@ -34,6 +34,14 @@ def cycle(connect,tasks=None,clock=time.monotonic):
   if not healthy:fault(name,code)
  try:
   c=connect();c.execute('SELECT 1').fetchone()
+  try:
+   from launch_features import evaluate_alerts
+   created=evaluate_alerts(c)
+   with LOCK:STATE['checks']['alerts']={'status':'OK','checked_at':stamp(),'created':created}
+  except Exception:
+   c.rollback()
+   with LOCK:STATE['checks']['alerts']={'status':'FAILED','checked_at':stamp()}
+   fault('alerts','ALERT_CHECK_FAILED')
   with LOCK:STATE['database']='OK';STATE['last_cycle']=stamp()
   payload=snapshot();payload.pop('running',None)
   c.execute('INSERT INTO operation_runs(created_at,payload) VALUES(?,?)',(stamp(),json.dumps(payload)))

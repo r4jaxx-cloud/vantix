@@ -46,5 +46,15 @@ try:
   assert 'not a safety guarantee' in page.locator('#page').inner_text()
   page.evaluate("gmgnData.trending=[{symbol:'BTC',name:'Bitcoin',chain:'sol',price_change:4,volume:1000,liquidity:500,market_cap:5000,address:'fixtureAddress'}];gmgnUsable.trending=true;applyGmgnFilters()")
   page.locator('[data-coin-kind="trending"]').click();page.locator('#coinDialog[open]').wait_for();assert 'price move' in page.locator('#coinDialog').inner_text().lower();assert page.locator('#coinDialog').get_by_text('Ask VANTIX').count()==0
+  page.route('**/api/notifications',lambda r:r.fulfill(content_type='application/json',body='{"data":[{"id":7,"message":"BTC threshold fixture","source":"fixture","observed_at":"now","read":0}],"unread":1}'))
+  page.route('**/api/notifications/read',lambda r:r.fulfill(content_type='application/json',body='{"ok":true}'))
+  page.set_viewport_size({'width':390,'height':844})
+  page.goto(base+'/alerts');page.get_by_text('BTC threshold fixture',exact=False).wait_for()
+  assert page.locator('#savedSymbol').evaluate('(el)=>el.tagName')=='SELECT'
+  assert page.locator('#savedSymbol option').count()==12
+  assert page.locator('#unreadAlerts').text_content()=='1'
+  with page.expect_request('**/api/notifications/read') as acknowledged:
+   page.get_by_role('button',name='Mark displayed alerts read').click()
+  assert acknowledged.value.post_data_json=={'through':7}
   assert not errors,errors;browser.close();print('Browser search, CSP, navigation, charts and coin-detail regressions passed')
 finally:s.shutdown();s.server_close()
