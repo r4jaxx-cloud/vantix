@@ -1,3 +1,4 @@
+import chat_features
 import security,base64
 from security import hashpw,checkpw
 import free_data, storage, launch_features, mail_service, ai_service, operations, owner_reports, gmgn_service
@@ -151,6 +152,8 @@ class H(BaseHTTPRequestHandler):
         if p.path in ('/api/capabilities','/api/profile','/api/community','/api/saved','/api/notifications','/api/admin'):
             c=db();result=launch_features.get(self,p.path,q,c,user_from_request(self));c.close()
             if result:return self.send(result[0],json.dumps(result[1]))
+        if p.path.startswith('/api/chat/'):
+            c=db();result=chat_features.get(p.path,q,c,user_from_request(self));c.close();return self.send(result[0],json.dumps(result[1]))
         if p.path=='/api/health':
             return self.send(200,json.dumps({'ok':True,'service':'VANTIX','mode':'free-only','note':'Service health is not provider health. Each data response reports its own status.'}))
         if p.path=='/api/market': return self.send(200,json.dumps(free_data.market()))
@@ -207,6 +210,10 @@ class H(BaseHTTPRequestHandler):
         if self.path.startswith('/api/auth/') and not auth_allowed(self.client_address[0]):return self.send(429,json.dumps({'ok':False,'message':'Too many sign-in attempts. Please wait a minute.'}))
         try: body=json_body(self)
         except Exception:return self.send(400,json.dumps({'error':'Invalid JSON'}))
+        if self.path=='/api/auth/login' and '@' not in str(body.get('email','')):
+            handle=str(body.get('email','')).strip().lower();c=db()
+            match=c.execute('SELECT u.email FROM users u JOIN social_profiles p ON p.user_id=u.id WHERE p.handle=?',(handle,)).fetchone();c.close()
+            if match:body['email']=match['email']
         if self.path in ('/api/auth/register','/api/auth/login','/api/auth/reset-request','/api/auth/resend'):
             email=str(body.get('email','')).strip().lower()
             c=db();allowed=security.auth_limit(c,email,self.client_address[0],now().strftime('%Y-%m-%dT%H:%M'));c.close()
@@ -219,12 +226,12 @@ class H(BaseHTTPRequestHandler):
             if not mail_service.enqueue(lambda:email_action(action,email,pw)):return self.send(503,json.dumps({'message':'Email requests are busy. Please try later.'}))
             return self.send(200,json.dumps({'ok':True,'message':'If eligible, check your email to continue.'}))
         extra_paths=('/api/auth/reset-request','/api/auth/reset','/api/auth/resend','/api/events','/api/saved/add','/api/saved/remove','/api/profile','/api/community/follow','/api/feed/reaction','/api/feed/report','/api/admin/moderate','/api/notifications/read','/api/ai')
-        if self.path in extra_paths:
+        if self.path in extra_paths or self.path.startswith('/api/chat/'):
             c=db();u=user_from_request(self)
-            if u and self.path not in ('/api/events','/api/notifications/read'):
+            if u and self.path not in ('/api/events','/api/notifications/read','/api/chat/read'):
                 minute=now().strftime('%Y-%m-%dT%H:%M');r=c.execute('INSERT INTO limits(bucket,period,count) VALUES(?,?,1) ON CONFLICT(bucket,period) DO UPDATE SET count=count+1 WHERE count<30 RETURNING count',('write-'+str(u['id']),minute)).fetchone();c.commit()
                 if not r:c.close();return self.send(429,json.dumps({'message':'Please wait before trying again.'}))
-            result=launch_features.post(self,self.path,body,c,u,hashpw);c.close()
+            result=chat_features.post(self.path,body,c,u) if self.path.startswith('/api/chat/') else launch_features.post(self,self.path,body,c,u,hashpw);c.close()
             if result:return self.send(result[0],json.dumps(result[1]))
         if self.path=='/api/auth/logout':
             c=db(); c.execute('DELETE FROM sessions WHERE token=?',(token_hash(request_token(self)),)); c.commit(); security.audit(c,'logout');c.close(); self.session_cookie(clear=True); return self.send(200,json.dumps({'ok':True}))
