@@ -31,6 +31,46 @@ class Launch(unittest.TestCase):
   status,x,h=cls.call('/api/auth/login',{'email':email,'password':'test-password-long'});assert status==200
   cookie=h['Set-Cookie'];assert 'HttpOnly' in cookie and 'SameSite=Lax' in cookie
   return cookie.split(';')[0]
+ def test_social_account_groups_and_private_messages(self):
+  alice=self.account('social-alice@example.test');bob=self.account('social-bob@example.test');other=self.account('social-other@example.test')
+  aid=self.call('/api/auth/me',cookie=alice)[1]['user']['id'];bid=self.call('/api/auth/me',cookie=bob)[1]['user']['id']
+  profile={'handle':'alice_market','display_name':'Alice Markets','bio':'Crypto and policy'}
+  self.assertEqual(self.call('/api/chat/profile',profile,alice)[0],200)
+  self.assertEqual(self.call('/api/auth/login',{'email':'alice_market','password':'test-password-long'})[0],200)
+  self.assertEqual(self.call('/api/chat/profile',profile,bob)[0],409)
+  found=self.call('/api/chat/members?search=alice_market',cookie=bob)[1]['data']
+  self.assertEqual(found[0]['id'],aid);self.assertNotIn('email',found[0]);self.assertNotIn('password_hash',found[0])
+  self.assertEqual(self.call('/api/chat/members')[0],401)
+  self.assertEqual(self.call('/api/saved/add',{'kind':'alerts','symbol':'BTC','value':1},alice)[0],200)
+  self.assertEqual(self.call('/api/community/follow',{'user_id':aid,'active':True},bob)[0],200)
+  self.assertEqual(self.call('/api/chat/profile?user_id='+str(aid),cookie=bob)[1]['followers'][0]['id'],bid)
+  _,group,_=self.call('/api/chat/groups/create',{'name':'Policy discussion'},alice);gid=group['id']
+  self.assertEqual(self.call('/api/chat/messages?group_id='+str(gid),cookie=bob)[0],403)
+  payload={'group_id':gid,'body':'Group discussion','client_id':'group-fixture-00001'}
+  self.assertEqual(self.call('/api/chat/send',payload,bob)[0],403)
+  self.assertEqual(self.call('/api/chat/groups/join',{'group_id':gid,'active':True},bob)[0],200)
+  self.assertEqual(self.call('/api/chat/send',payload,bob)[0],200)
+  self.assertEqual(len(self.call('/api/chat/messages?group_id='+str(gid),cookie=alice)[1]['data']),1)
+  self.assertEqual(self.call('/api/chat/groups/join',{'group_id':gid,'active':False},bob)[0],200)
+  self.assertEqual(self.call('/api/chat/messages?group_id='+str(gid),cookie=bob)[0],403)
+  payload={'peer_id':bid,'body':'Private market discussion','client_id':'private-fixture-00001'}
+  status,sent,_=self.call('/api/chat/send',payload,alice);self.assertEqual(status,200)
+  self.assertEqual(self.call('/api/chat/send',payload,alice)[1]['id'],sent['id'])
+  self.assertEqual(self.call('/api/chat/inbox',cookie=bob)[1]['data'][0]['unread'],1)
+  self.assertEqual(self.call('/api/chat/messages?peer_id='+str(aid),cookie=other)[1]['data'],[])
+  self.assertEqual(self.call('/api/chat/report',{'message_id':sent['id'],'reason':'Cannot read this'},other)[0],403)
+  self.assertEqual(self.call('/api/chat/delete',{'message_id':sent['id']},bob)[0],403)
+  self.assertEqual(self.call('/api/chat/read',{'peer_id':aid,'through':sent['id']},bob)[0],200)
+  self.assertEqual(self.call('/api/chat/inbox',cookie=bob)[1]['data'][0]['unread'],0)
+  self.assertEqual(self.call('/api/chat/block',{'peer_id':aid,'active':True},bob)[0],200)
+  payload['client_id']='private-fixture-00002';self.assertEqual(self.call('/api/chat/send',payload,alice)[0],403)
+  self.assertEqual(self.call('/api/chat/block',{'peer_id':aid,'active':False},bob)[0],200)
+  self.assertEqual(self.call('/api/chat/report',{'message_id':sent['id'],'reason':'Please review this message'},bob)[0],200)
+  reports=self.call('/api/admin',cookie=self.owner)[1]['reports'];self.assertTrue(any(r.get('reported_message')=='Private market discussion' for r in reports))
+  self.assertEqual(self.call('/api/admin/moderate',{'action':'hide','kind':'message','target_id':sent['id']},self.owner)[0],200)
+  self.assertEqual(self.call('/api/chat/messages?peer_id='+str(aid),cookie=bob)[1]['data'],[])
+  self.assertEqual(self.call('/api/chat/send',{'peer_id':bid,'body':'bad','client_id':'short'},alice)[0],400)
+  self.assertEqual(self.call('/api/chat/send',payload,alice,'https://evil.test')[0],403)
  def test_cookie_and_csrf(self):
   self.assertTrue(self.call('/api/auth/me',cookie=self.member)[1]['authenticated'])
   self.assertEqual(self.call('/api/saved/add',{'kind':'watchlist','symbol':'BTC'},self.member,'https://evil.test')[0],403)
