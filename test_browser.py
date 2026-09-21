@@ -56,5 +56,31 @@ try:
   with page.expect_request('**/api/notifications/read') as acknowledged:
    page.get_by_role('button',name='Mark displayed alerts read').click()
   assert acknowledged.value.post_data_json=={'through':7}
+  # Two isolated local accounts: live group delivery, private inbox and shared alert access.
+  c=server.db();ids=[]
+  for email in ('chat-a@example.test','chat-b@example.test'):
+   cur=c.execute('INSERT INTO users(email,password_hash,verified,created_at) VALUES(?,?,1,?)',(email,server.hashpw('chat-fixture-password'),server.iso(server.now())));ids.append(cur.lastrowid)
+  c.commit();c.close()
+  contexts=[browser.new_context(viewport={'width':390,'height':844}),browser.new_context()]
+  for context,email,name,handle in zip(contexts,('chat-a@example.test','chat-b@example.test'),('Chat Alice','Chat Bob'),('chat_alice','chat_bob')):
+   assert context.request.post(base+'/api/auth/login',data={'email':email,'password':'chat-fixture-password'}).ok
+   assert context.request.post(base+'/api/chat/profile',data={'display_name':name,'handle':handle,'bio':'Market discussion fixture'}).ok
+  a=contexts[0].new_page();b=contexts[1].new_page()
+  for tab in (a,b):tab.on('pageerror',lambda e:errors.append(str(e)));tab.goto(base+'/feed')
+  a.get_by_role('button',name='Groups',exact=True).click();a.get_by_label('New group name').fill('Browser market group');a.get_by_role('button',name='Create group',exact=True).click()
+  a.locator('#chatTitle').get_by_text('Browser market group',exact=True).wait_for()
+  b.get_by_role('button',name='Groups',exact=True).click();b.get_by_role('button',name='Join group',exact=True).click();b.locator('#chatTitle').get_by_text('Browser market group',exact=True).wait_for()
+  a.locator('#chatBody').fill('Live group fixture');a.get_by_role('button',name='Send message',exact=True).click()
+  b.locator('#chatMessages').get_by_text('Live group fixture',exact=True).wait_for(timeout=15000)
+  a.get_by_role('button',name='People',exact=True).click();a.locator('#memberSearch').fill('chat_bob');a.get_by_role('button',name='Search members',exact=True).click()
+  a.locator('#chatPeople').get_by_role('button',name='Follow',exact=True).click();a.locator('#chatPeople').get_by_role('button',name='Unfollow',exact=True).wait_for()
+  a.locator('#chatPeople').get_by_role('button',name='Message',exact=True).click();a.locator('#chatTitle').get_by_text('Chat Bob',exact=True).wait_for()
+  a.locator('#chatBody').fill('<img src=x onerror=alert(1)> private fixture');a.get_by_role('button',name='Send message',exact=True).click();a.locator('#chatMessages').get_by_text('<img src=x onerror=alert(1)> private fixture',exact=True).wait_for()
+  b.get_by_role('button',name='Messages',exact=True).click();b.locator('#chatInbox').get_by_role('button',name='Chat Alice',exact=True).click()
+  b.locator('#chatMessages').get_by_text('<img src=x onerror=alert(1)> private fixture',exact=True).wait_for();assert b.locator('#chatMessages img').count()==0
+  b.get_by_role('button',name='Block member',exact=True).click();b.get_by_role('button',name='Unblock member',exact=True).wait_for();assert b.locator('#chatSend').is_disabled()
+  a.goto(base+'/alerts');a.locator('#savedSymbol').select_option('BTC');a.locator('#savedValue').fill('100000');a.get_by_role('button',name='Add',exact=True).click();a.locator('#savedRows').get_by_text('100000 USDT threshold',exact=False).wait_for()
+  assert a.get_by_role('button',name='Register',exact=True).count()==0
+  for context in contexts:context.close()
   assert not errors,errors;browser.close();print('Browser search, CSP, navigation, charts and coin-detail regressions passed')
 finally:s.shutdown();s.server_close()

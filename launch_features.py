@@ -80,7 +80,7 @@ def get(h,path,q,c,u):
   def count(sql,args=()):return c.execute(sql,args).fetchone()['n']
   counts={name:count(sql) for name,sql in {'registrations':'SELECT count(*) n FROM users','verified_users':'SELECT count(*) n FROM users WHERE verified=1','posts':'SELECT count(*) n FROM posts','comments':'SELECT count(*) n FROM comments','reactions':'SELECT count(*) n FROM reactions','open_reports':"SELECT count(*) n FROM reports WHERE status='open'",'page_views':"SELECT count(*) n FROM events WHERE event='page_view'",'unique_visitors':"SELECT count(distinct visitor) n FROM events WHERE event='page_view'"}.items()}
   for name,days in [('daily_active',1),('weekly_active',7),('monthly_active',30)]:counts[name]=count('SELECT count(distinct user_id) n FROM events WHERE created_at>=?',((datetime.now(timezone.utc)-timedelta(days=days)).isoformat(),))
-  reports=[dict(r) for r in c.execute("SELECT * FROM reports ORDER BY id DESC LIMIT 100").fetchall()]
+  reports=[dict(r) for r in c.execute("SELECT r.*,(SELECT m.body FROM chat_messages m WHERE r.kind='message' AND m.id=r.target_id) reported_message FROM reports r ORDER BY r.id DESC LIMIT 100").fetchall()]
   with free_data.LOCK:health=[{k:v.get(k) for k in ('source','status','checked_at','retrieved_at','message')} for v in free_data.CACHE.values()]
   usage=[dict(r) for r in c.execute('SELECT event,count(*) n FROM events GROUP BY event').fetchall()]
   pages=[dict(r) for r in c.execute("SELECT path,count(*) n FROM events WHERE event='page_view' GROUP BY path ORDER BY n DESC LIMIT 30").fetchall()]
@@ -170,8 +170,8 @@ def post(h,path,b,c,u,hashpw):
   action=b.get('action');kind=b.get('kind')
   try:target=int(b.get('target_id',0))
   except (TypeError,ValueError):return 400,{'message':'Invalid target.'}
-  if action in ('hide','restore') and kind in ('post','comment'):
-   if not c.execute({'post':'SELECT id FROM posts WHERE id=?','comment':'SELECT id FROM comments WHERE id=?'}[kind],(target,)).fetchone():return 404,{'message':'Content not found.'}
+  if action in ('hide','restore') and kind in ('post','comment','message'):
+   if not c.execute({'post':'SELECT id FROM posts WHERE id=?','comment':'SELECT id FROM comments WHERE id=?','message':'SELECT id FROM chat_messages WHERE id=?'}[kind],(target,)).fetchone():return 404,{'message':'Content not found.'}
    if action=='hide':c.execute('INSERT OR REPLACE INTO hidden_content(kind,target_id,moderator_id,created_at) VALUES(?,?,?,?)',(kind,target,uid,ts()))
    else:c.execute('DELETE FROM hidden_content WHERE kind=? AND target_id=?',(kind,target))
    c.execute("UPDATE reports SET status='reviewed' WHERE kind=? AND target_id=?",(kind,target))
