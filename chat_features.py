@@ -3,6 +3,9 @@ import re,sqlite3
 from datetime import datetime,timezone
 import ai_service
 
+INDUSTRIES=('Finance','Technology','Crypto & Web3','Energy','Healthcare','Property','Media & Design','Education','Other')
+PROFESSIONS=('Investor','Trader','Founder','Analyst','Engineer','Creator','Student','Other')
+
 def stamp():return datetime.now(timezone.utc).isoformat()
 def integer(value):
  if isinstance(value,bool):raise ValueError()
@@ -30,18 +33,20 @@ def get(path,q,c,u):
  uid=u['id'];data={k:v[0] for k,v in q.items() if v}
  if path=='/api/chat/members':
   search=str(data.get('search','')).strip()[:80]
-  rows=c.execute("SELECT u.id,coalesce(p.display_name,'Member '||u.id) display_name,(SELECT count(*) FROM follows f WHERE f.followed_id=u.id) followers,(SELECT count(*) FROM follows f WHERE f.follower_id=u.id) following_count,EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=? AND f.followed_id=u.id) following,EXISTS(SELECT 1 FROM chat_blocks b WHERE b.user_id=? AND b.blocked_id=u.id) blocked FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN social_profiles sp ON sp.user_id=u.id WHERE u.verified=1 AND coalesce(p.banned,0)=0 AND instr(lower(coalesce(p.display_name,'Member '||u.id)||' '||coalesce(sp.handle,'')),lower(?))>0 ORDER BY u.id DESC LIMIT 50",(uid,uid,search)).fetchall()
+  industry=str(data.get('industry',''));profession=str(data.get('profession',''))
+  if (industry and industry not in INDUSTRIES) or (profession and profession not in PROFESSIONS):return 400,{'message':'Choose a supported field or profession.'}
+  rows=c.execute("SELECT u.id,coalesce(p.display_name,'Member '||u.id) display_name,coalesce(sp.handle,'') handle,coalesce(pp.headline,'') headline,coalesce(pp.industry,'') industry,coalesce(pp.profession,'') profession,(SELECT count(*) FROM follows f WHERE f.followed_id=u.id) followers,(SELECT count(*) FROM follows f WHERE f.follower_id=u.id) following_count,EXISTS(SELECT 1 FROM follows f WHERE f.follower_id=? AND f.followed_id=u.id) following,EXISTS(SELECT 1 FROM chat_blocks b WHERE b.user_id=? AND b.blocked_id=u.id) blocked FROM users u LEFT JOIN profiles p ON p.user_id=u.id LEFT JOIN social_profiles sp ON sp.user_id=u.id LEFT JOIN professional_profiles pp ON pp.user_id=u.id WHERE u.verified=1 AND coalesce(p.banned,0)=0 AND instr(lower(coalesce(p.display_name,'Member '||u.id)||' '||coalesce(sp.handle,'')||' '||coalesce(pp.headline,'')),lower(?))>0 AND (?='' OR pp.industry=?) AND (?='' OR pp.profession=?) ORDER BY u.id DESC LIMIT 50",(uid,uid,search,industry,industry,profession,profession)).fetchall()
   return 200,{'data':[dict(r) for r in rows],'user_id':uid}
  if path=='/api/chat/profile':
   try:pid=integer(data.get('user_id',uid))
   except (ValueError,TypeError):return 400,{'message':'Invalid member.'}
   info=member(c,pid)
   if not info:return 404,{'message':'Member unavailable.'}
-  profile=c.execute('SELECT handle,bio FROM social_profiles WHERE user_id=?',(pid,)).fetchone()
+  profile=c.execute("SELECT s.handle,s.bio,coalesce(p.headline,'') headline,coalesce(p.industry,'') industry,coalesce(p.profession,'') profession FROM social_profiles s LEFT JOIN professional_profiles p ON p.user_id=s.user_id WHERE s.user_id=?",(pid,)).fetchone()
   followers=c.execute("SELECT u.id,coalesce(p.display_name,'Member '||u.id) display_name FROM follows f JOIN users u ON u.id=f.follower_id LEFT JOIN profiles p ON p.user_id=u.id WHERE f.followed_id=? AND u.verified=1 AND coalesce(p.banned,0)=0 ORDER BY f.created_at DESC LIMIT 50",(pid,)).fetchall()
   following=c.execute("SELECT u.id,coalesce(p.display_name,'Member '||u.id) display_name FROM follows f JOIN users u ON u.id=f.followed_id LEFT JOIN profiles p ON p.user_id=u.id WHERE f.follower_id=? AND u.verified=1 AND coalesce(p.banned,0)=0 ORDER BY f.created_at DESC LIMIT 50",(pid,)).fetchall()
   posts=c.execute("SELECT id,body,created_at FROM posts WHERE author_id=? AND NOT EXISTS(SELECT 1 FROM hidden_content h WHERE h.kind='post' AND h.target_id=posts.id) ORDER BY id DESC LIMIT 10",(pid,)).fetchall()
-  return 200,{'profile':{**dict(info),**(dict(profile) if profile else {'handle':'','bio':''})},'followers':[dict(r) for r in followers],'following':[dict(r) for r in following],'posts':[dict(r) for r in posts],'is_self':pid==uid}
+  return 200,{'profile':{**dict(info),**(dict(profile) if profile else {'handle':'','bio':'','headline':'','industry':'','profession':''})},'followers':[dict(r) for r in followers],'following':[dict(r) for r in following],'posts':[dict(r) for r in posts],'is_self':pid==uid}
  if path=='/api/chat/groups':
   rows=c.execute('SELECT g.*,EXISTS(SELECT 1 FROM chat_members m WHERE m.group_id=g.id AND m.user_id=?) joined,(SELECT count(*) FROM chat_members m WHERE m.group_id=g.id) members FROM chat_groups g WHERE instr(lower(g.name),lower(?))>0 ORDER BY joined DESC,g.id DESC LIMIT 100',(uid,str(data.get('search',''))[:80])).fetchall()
   return 200,{'data':[dict(r) for r in rows],'user_id':uid}
@@ -65,7 +70,10 @@ def post(path,b,c,u):
   if path=='/api/chat/profile':
    handle=str(b.get('handle','')).strip().lower();bio=str(b.get('bio','')).strip();name=str(b.get('display_name','')).strip()
    if not re.fullmatch(r'[a-z0-9_]{3,24}',handle) or len(bio)>280 or not 2<=len(name)<=40 or any(ord(ch)<32 for ch in name):return 400,{'message':'Use a 3–24 character username (letters, numbers, underscore), a 2–40 character name and bio up to 280 characters.'}
+   headline=str(b.get('headline','')).strip();industry=str(b.get('industry',''));profession=str(b.get('profession',''))
+   if len(headline)>100 or any(ord(ch)<32 for ch in headline) or (industry and industry not in INDUSTRIES) or (profession and profession not in PROFESSIONS):return 400,{'message':'Use a headline up to 100 characters and a listed field and profession.'}
    try:
+    c.execute('INSERT INTO professional_profiles(user_id,headline,industry,profession) VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET headline=excluded.headline,industry=excluded.industry,profession=excluded.profession',(uid,headline,industry,profession))
     c.execute('INSERT INTO social_profiles(user_id,handle,bio) VALUES(?,?,?) ON CONFLICT(user_id) DO UPDATE SET handle=excluded.handle,bio=excluded.bio',(uid,handle,bio))
     c.execute('INSERT INTO profiles(user_id,display_name) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET display_name=excluded.display_name',(uid,name));c.commit()
    except sqlite3.IntegrityError:c.rollback();return 409,{'message':'That username is already taken.'}
