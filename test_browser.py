@@ -85,7 +85,7 @@ try:
   a.screenshot(path='social-mobile-preview.png',full_page=True)
   b.goto(base+'/feed');b.screenshot(path='social-feed-preview.png',full_page=True)
   b.goto(base+'/profile');b.locator('#socialHeadline').fill('Technology investor');b.locator('#socialIndustry').select_option('Technology');b.locator('#socialProfession').select_option('Investor');b.get_by_role('button',name='Save profile',exact=True).click();b.get_by_text('Profile saved.',exact=True).wait_for()
-  a.goto(base+'/network');a.locator('#memberIndustry').select_option('Technology');a.locator('#memberProfession').select_option('Investor');a.get_by_role('button',name='Find people',exact=True).click();a.locator('#chatPeople').get_by_role('button',name='Chat Bob',exact=True).wait_for();assert a.locator('#chatPeople .personCard').count()==1
+  a.goto(base+'/network');a.locator('#memberIndustry').select_option('Technology');a.locator('#memberProfession').select_option('Investor');a.get_by_role('button',name='Find people',exact=True).click();a.wait_for_function("document.querySelectorAll('#chatPeople .personCard').length===1 && document.querySelector('#chatPeople').textContent.includes('Technology investor')");assert a.locator('#chatPeople').get_by_role('button',name='Chat Bob',exact=True).is_visible()
   a.goto(base+'/insiders');a.get_by_role('heading',name='Investor activity',exact=True).wait_for();assert a.locator('#filingKind').input_value()=='insiders'
   page.set_viewport_size({'width':390,'height':844});page.goto(base+'/');page.get_by_role('heading',name='Welcome to VANTIX.').wait_for();assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth');page.screenshot(path='welcome-mobile-preview.png',full_page=True)
   for context in contexts:context.close()
