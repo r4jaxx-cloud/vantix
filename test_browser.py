@@ -10,8 +10,8 @@ try:
  with sync_playwright() as p:
   browser=p.chromium.launch();page=browser.new_page();errors=[];page.on('pageerror',lambda e:errors.append(str(e)))
   page.route('https://s3.tradingview.com/**',lambda r:r.fulfill(content_type='application/javascript',body='window.chartLoaded=true;'))
-  page.goto(base+'/');assert page.locator('#globalSearchResults').is_hidden()
-  page.locator('#globalSearchInput').fill('bitcoin');page.locator('#globalSearchResults').wait_for();assert 'Bitcoin' in page.locator('#globalSearchResults').inner_text()
+  page.goto(base+'/');page.get_by_role('heading',name='Welcome to VANTIX.').wait_for();assert page.locator('.world3d').is_visible();page.screenshot(path='welcome-preview.png',full_page=True);page.get_by_role('link',name='Preview without an account',exact=False).click();page.wait_for_url('**/feed');assert page.locator('#globalSearchResults').is_hidden()
+  page.locator('#globalSearchInput').fill('bitcoin');assert page.locator('#globalSearchResults').is_hidden();page.locator('#globalSearchInput').press('Enter');page.locator('#globalSearchResults').wait_for();assert 'Bitcoin' in page.locator('#globalSearchResults').inner_text()
   page.locator('#globalSearchInput').fill('');assert page.locator('#globalSearchResults').is_hidden()
   page.locator('a[data-route="/radar"]').click();page.wait_for_url('**/radar')
   persisted=page.evaluate("""()=>{marketData=[{symbol:'BTC',price:60000,change:4,volume:100000,quote:'USDT',source:'fixture',status:'LIVE',updated:'now'}];applyRadarFilters();document.querySelector('.radarRow').open=true;applyRadarFilters();return document.querySelector('.radarRow').open}""");assert persisted
@@ -67,20 +67,27 @@ try:
    assert context.request.post(base+'/api/chat/profile',data={'display_name':name,'handle':handle,'bio':'Market discussion fixture'}).ok
   a=contexts[0].new_page();b=contexts[1].new_page()
   for tab in (a,b):tab.on('pageerror',lambda e:errors.append(str(e)));tab.goto(base+'/feed')
-  a.get_by_role('button',name='Groups',exact=True).click();a.get_by_label('New group name').fill('Browser market group');a.get_by_role('button',name='Create group',exact=True).click()
+  a.locator('#nav').get_by_role('link',name='Groups',exact=True).click();a.get_by_label('New group name').fill('Browser market group');a.get_by_role('button',name='Create group',exact=True).click()
   a.locator('#chatTitle').get_by_text('Browser market group',exact=True).wait_for()
-  b.get_by_role('button',name='Groups',exact=True).click();b.get_by_role('button',name='Join group',exact=True).click();b.locator('#chatTitle').get_by_text('Browser market group',exact=True).wait_for()
+  b.locator('#nav').get_by_role('link',name='Groups',exact=True).click();b.get_by_role('button',name='Join group',exact=True).click();b.locator('#chatTitle').get_by_text('Browser market group',exact=True).wait_for()
   a.locator('#chatBody').fill('Live group fixture');a.get_by_role('button',name='Send message',exact=True).click()
   b.locator('#chatMessages').get_by_text('Live group fixture',exact=True).wait_for(timeout=15000)
-  a.get_by_role('button',name='People',exact=True).click();a.locator('#memberSearch').fill('chat_bob');a.get_by_role('button',name='Search members',exact=True).click()
+  a.locator('#nav').get_by_role('link',name='My network',exact=True).click();a.locator('#memberSearch').fill('chat_bob');a.get_by_role('button',name='Find people',exact=True).click()
   a.locator('#chatPeople').get_by_role('button',name='Follow',exact=True).click();a.locator('#chatPeople').get_by_role('button',name='Unfollow',exact=True).wait_for()
   a.locator('#chatPeople').get_by_role('button',name='Message',exact=True).click();a.locator('#chatTitle').get_by_text('Chat Bob',exact=True).wait_for()
   a.locator('#chatBody').fill('<img src=x onerror=alert(1)> private fixture');a.get_by_role('button',name='Send message',exact=True).click();a.locator('#chatMessages').get_by_text('<img src=x onerror=alert(1)> private fixture',exact=True).wait_for()
-  b.get_by_role('button',name='Messages',exact=True).click();b.locator('#chatInbox').get_by_role('button',name='Chat Alice',exact=True).click()
+  b.locator('#nav').get_by_role('link',name='Messages',exact=True).click();b.locator('#chatInbox').get_by_role('button',name='Chat Alice',exact=True).click()
   b.locator('#chatMessages').get_by_text('<img src=x onerror=alert(1)> private fixture',exact=True).wait_for();assert b.locator('#chatMessages img').count()==0
   b.get_by_role('button',name='Block member',exact=True).click();b.get_by_role('button',name='Unblock member',exact=True).wait_for();assert b.locator('#chatSend').is_disabled()
   a.goto(base+'/alerts');a.locator('#savedSymbol').select_option('BTC');a.locator('#savedValue').fill('100000');a.get_by_role('button',name='Add',exact=True).click();a.locator('#savedRows').get_by_text('100000 USDT threshold',exact=False).wait_for()
   assert a.get_by_role('button',name='Register',exact=True).count()==0
+  a.goto(base+'/');a.get_by_role('heading',name='Your feed',exact=True).wait_for();assert a.locator('.welcomeSignIn').count()==0
+  a.screenshot(path='social-mobile-preview.png',full_page=True)
+  b.goto(base+'/feed');b.screenshot(path='social-feed-preview.png',full_page=True)
+  b.goto(base+'/profile');b.locator('#socialHeadline').fill('Technology investor');b.locator('#socialIndustry').select_option('Technology');b.locator('#socialProfession').select_option('Investor');b.get_by_role('button',name='Save profile',exact=True).click();b.get_by_text('Profile saved.',exact=True).wait_for()
+  a.goto(base+'/network');a.locator('#memberIndustry').select_option('Technology');a.locator('#memberProfession').select_option('Investor');a.get_by_role('button',name='Find people',exact=True).click();a.locator('#chatPeople').get_by_role('button',name='Chat Bob',exact=True).wait_for();assert a.locator('#chatPeople .personCard').count()==1
+  a.goto(base+'/insiders');a.get_by_role('heading',name='Investor activity',exact=True).wait_for();assert a.locator('#filingKind').input_value()=='insiders'
+  page.set_viewport_size({'width':390,'height':844});page.goto(base+'/');page.get_by_role('heading',name='Welcome to VANTIX.').wait_for();assert page.evaluate('document.documentElement.scrollWidth<=window.innerWidth');page.screenshot(path='welcome-mobile-preview.png',full_page=True)
   for context in contexts:context.close()
   assert not errors,errors;browser.close();print('Browser search, CSP, navigation, charts and coin-detail regressions passed')
 finally:s.shutdown();s.server_close()
