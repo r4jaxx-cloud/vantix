@@ -31,3 +31,9 @@ jobs:
         with:
           name: security-scan-report
           path: bandit-report.json
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: social-design-previews
+          path: "*-preview.png"
