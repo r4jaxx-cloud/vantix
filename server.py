@@ -13,7 +13,7 @@ ROOT=Path(__file__).parent
 DB=Path(os.getenv('VANTIX_DB_PATH',str(ROOT/'vantix.db')))
 AUTH_LIMITS={}
 AUTH_LOCK=threading.Lock()
-PUBLIC_ROUTES={'/','/ask','/markets','/crypto','/trending','/flows','/stocks','/forex','/commodities','/economy','/news','/feed','/radar','/shield','/watchlist','/alerts','/research','/copilot','/sectors','/portfolio','/account','/admin','/reset-password','/privacy','/terms'}
+PUBLIC_ROUTES={'/network','/groups','/messages','/profile','/insiders','/','/ask','/markets','/crypto','/trending','/flows','/stocks','/forex','/commodities','/economy','/news','/feed','/radar','/shield','/watchlist','/alerts','/research','/copilot','/sectors','/portfolio','/account','/admin','/reset-password','/privacy','/terms'}
 def auth_allowed(ip):
     ip=security.private_id(ip)
     with AUTH_LOCK:
@@ -166,9 +166,9 @@ class H(BaseHTTPRequestHandler):
             topic=(q.get('topic') or ['all'])[0]
             if topic not in ('all','finance','world','politics','weather','energy','policy'):return self.send(400,json.dumps({'message':'Unknown news topic'}))
             return self.send(200,json.dumps(free_data.news(topic)))
-        if p.path in ('/api/economy','/api/sectors','/api/filings'):
+        if p.path in ('/api/economy','/api/sectors','/api/filings','/api/companies'):
             try:
-                result=free_data.filings((q.get('cik') or [''])[0]) if p.path=='/api/filings' else free_data.economy((q.get('country') or ['GBR'])[0],p.path=='/api/sectors')
+                result=free_data.companies((q.get('q') or [''])[0]) if p.path=='/api/companies' else free_data.filings((q.get('cik') or [''])[0],(q.get('kind') or ['all'])[0]) if p.path=='/api/filings' else free_data.economy((q.get('country') or ['GBR'])[0],p.path=='/api/sectors')
             except ValueError as e:return self.send(400,json.dumps({'message':str(e)}))
             return self.send(200,json.dumps(result))
         if p.path=='/api/social': return self.send(200,json.dumps({'data':[],'configured':False,'status':'UNAVAILABLE','message':'Paid social APIs are disabled in the free-only build. Community posts are available in VANTIX Feed.'}))
@@ -269,7 +269,7 @@ class H(BaseHTTPRequestHandler):
             if len(src)>2048 or len(label)>200:return self.send(400,json.dumps({'ok':False,'message':'Source URL or label is too long.'}))
             if src and not security.safeurl(src): return self.send(400,json.dumps({'ok':False,'message':'Source must be an http or https URL.'}))
             if not bodytxt or len(bodytxt)>1000:return self.send(400,json.dumps({'ok':False,'message':'Post must be 1–1000 characters.'}))
-            c=db(); cur=c.execute('INSERT INTO posts(author_id,body,source_url,source_label,created_at) VALUES(?,?,?,?,?)',(u['id'],bodytxt,src,label,iso(now()))); pid=cur.lastrowid;label=str(body.get('label','Global Markets'));allowed=('Global Markets','Crypto','Stocks','Macro & Politics','Weather & Commodities','Community commentary','AI Interpretation','Rumour','Prediction');label=label if label in allowed else 'Global Markets';c.execute('INSERT INTO post_labels(post_id,label) VALUES(?,?)',(pid,label));launch_features.record(c,u['id'],'feed_post');c.close();return self.send(200,json.dumps({'ok':True,'id':pid}))
+            c=db(); cur=c.execute('INSERT INTO posts(author_id,body,source_url,source_label,created_at) VALUES(?,?,?,?,?)',(u['id'],bodytxt,src,label,iso(now()))); pid=cur.lastrowid;label=str(body.get('label','Global Markets'));allowed=('Global Markets','Crypto','Stocks','Macro & Politics','Weather & Commodities','Technology','Business & Careers','Ideas & Learning','Community commentary','AI Interpretation','Rumour','Prediction');label=label if label in allowed else 'Global Markets';c.execute('INSERT INTO post_labels(post_id,label) VALUES(?,?)',(pid,label));launch_features.record(c,u['id'],'feed_post');c.close();return self.send(200,json.dumps({'ok':True,'id':pid}))
         if self.path=='/api/feed/comment':
             u=user_from_request(self)
             if not u or not u['verified']:return self.send(401,json.dumps({'ok':False,'message':'Sign in with a verified account to comment.'}))
