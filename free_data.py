@@ -28,7 +28,7 @@ def number(value):
 def fetch(url):
     if urlparse(url).scheme!='https':raise ValueError('HTTPS provider required')
     headers={'User-Agent':'VANTIX public information reader','Accept':'application/json, application/xml, text/xml'}
-    if 'data.sec.gov/' in url:
+    if urlparse(url).hostname in ('data.sec.gov','www.sec.gov'):
         contact=os.getenv('SEC_USER_AGENT','')
         if not contact or '@' not in contact:raise ValueError('SEC requires the site owner to configure an identifying contact address')
         headers['User-Agent']=contact
@@ -161,15 +161,30 @@ def economy(country='GBR',sector=False):
         return list(latest.values())
     return cached('sector' +country if sector else 'economy'+country,'World Bank',url,parse,86400,'ANNUAL')
 
-def filings(cik):
+
+def companies(query):
+    query=query.strip().lower()
+    if not 2<=len(query)<=80:raise ValueError('Enter at least two characters of a company name or ticker')
+    url='https://www.sec.gov/files/company_tickers.json'
+    result=cached('sec-companies','SEC EDGAR',url,lambda:list(json.loads(fetch(url)).values()),86400,'PUBLISHED')
+    rows=result.get('data',[])
+    found=[{'name':r['title'],'ticker':r['ticker'],'cik':str(r['cik_str'])} for r in rows if query in str(r.get('title','')).lower() or query in str(r.get('ticker','')).lower()]
+    found.sort(key=lambda r:(r['ticker'].lower()!=query,r['name']))
+    return {**result,'data':found[:20]}
+
+def filings(cik,kind="all"):
+    if kind not in ("all","insiders","institutions"):raise ValueError("Choose a supported filing type")
     if not re.fullmatch(r'\d{1,10}',cik):raise ValueError('Enter a numeric SEC CIK (1–10 digits)')
     cik=cik.zfill(10);url='https://data.sec.gov/submissions/CIK'+cik+'.json'
     def parse():
         raw=json.loads(fetch(url));r=raw['filings']['recent'];rows=[]
-        for i,acc in enumerate(r['accessionNumber'][:25]):
-            rows.append({'title':raw['name']+' · '+r['form'][i],'published':r['filingDate'][i],'link':'https://www.sec.gov/Archives/edgar/data/'+str(int(cik))+'/'+acc.replace('-','')+'/'+quote(r['primaryDocument'][i],safe=''),'source':'SEC EDGAR','status':'FILED'})
-        return rows
-    return cached('filings'+cik,'SEC EDGAR',url,parse,600,'FILED')
+        for i,acc in enumerate(r['accessionNumber'][:1000]):
+            form=r['form'][i]
+            if kind=='insiders' and form not in ('3','3/A','4','4/A','5','5/A'):continue
+            if kind=='institutions' and form not in ('13F-HR','13F-HR/A','13F-NT','13F-NT/A'):continue
+            rows.append({'title':raw['name']+' · '+r['form'][i],'published':r['filingDate'][i],'link':'https://www.sec.gov/Archives/edgar/data/'+str(int(cik))+'/'+acc.replace('-','')+'/'+quote(r['primaryDocument'][i],safe=''),'source':'SEC EDGAR','status':'FILED','form':form,'entity':raw['name']})
+        return rows[:25 if kind=='all' else 100]
+    return cached('filings'+cik+kind,'SEC EDGAR',url,parse,600,'FILED')
 
 def market():
     a,b=parallel([crypto,forex]);rows=[]

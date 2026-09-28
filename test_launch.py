@@ -34,12 +34,16 @@ class Launch(unittest.TestCase):
  def test_social_account_groups_and_private_messages(self):
   alice=self.account('social-alice@example.test');bob=self.account('social-bob@example.test');other=self.account('social-other@example.test')
   aid=self.call('/api/auth/me',cookie=alice)[1]['user']['id'];bid=self.call('/api/auth/me',cookie=bob)[1]['user']['id']
-  profile={'handle':'alice_market','display_name':'Alice Markets','bio':'Crypto and policy'}
+  profile={'handle':'alice_market','display_name':'Alice Markets','bio':'Crypto and policy','headline':'Investor in technology','industry':'Technology','profession':'Investor'}
   self.assertEqual(self.call('/api/chat/profile',profile,alice)[0],200)
   self.assertEqual(self.call('/api/auth/login',{'email':'alice_market','password':'test-password-long'})[0],200)
   self.assertEqual(self.call('/api/chat/profile',profile,bob)[0],409)
   found=self.call('/api/chat/members?search=alice_market',cookie=bob)[1]['data']
-  self.assertEqual(found[0]['id'],aid);self.assertNotIn('email',found[0]);self.assertNotIn('password_hash',found[0])
+  self.assertEqual(found[0]['id'],aid);self.assertEqual(found[0]['industry'],'Technology');
+  self.assertEqual(len(self.call('/api/chat/members?industry=Technology&profession=Investor',cookie=bob)[1]['data']),1)
+  self.assertEqual(self.call('/api/chat/members?industry=Healthcare',cookie=bob)[1]['data'],[])
+  self.assertEqual(self.call('/api/chat/members?profession=Invalid',cookie=bob)[0],400)
+  self.assertNotIn('email',found[0]);self.assertNotIn('password_hash',found[0])
   self.assertEqual(self.call('/api/chat/members')[0],401)
   self.assertEqual(self.call('/api/saved/add',{'kind':'alerts','symbol':'BTC','value':1},alice)[0],200)
   self.assertEqual(self.call('/api/community/follow',{'user_id':aid,'active':True},bob)[0],200)
@@ -150,6 +154,14 @@ class Launch(unittest.TestCase):
    with self.assertRaises(sqlite3.OperationalError):storage.connect(server.DB,'')
 
 class Providers(unittest.TestCase):
+ def test_disclosure_filter_and_company_search(self):
+  raw={'name':'Fixture Company','filings':{'recent':{'accessionNumber':['0001','0002','0003'],'form':['10-K','4','13F-HR'],'filingDate':['2026-01-01']*3,'primaryDocument':['annual.htm','ownership.xml','holdings.xml']}}}
+  with patch.dict(free_data.CACHE,{},clear=True),patch('free_data.fetch',return_value=json.dumps(raw).encode()):
+   self.assertEqual([r['form'] for r in free_data.filings('123','insiders')['data']],['4'])
+   self.assertEqual([r['form'] for r in free_data.filings('123','institutions')['data']],['13F-HR'])
+  with patch.dict(free_data.CACHE,{},clear=True),patch('free_data.fetch',return_value=json.dumps({'0':{'title':'Fixture Company','ticker':'FIX','cik_str':123}}).encode()):
+   self.assertEqual(free_data.companies('FIX')['data'][0]['cik'],'123')
+
  def setUp(self):
   self.c=sqlite3.connect(':memory:');self.c.row_factory=sqlite3.Row;self.c.executescript(Path(__file__).with_name('launch_schema.sql').read_text())
   self.cache={'crypto':{'status':'SNAPSHOT','retrieved_at':server.iso(server.now()),'data':[{'symbol':'BTC','price':10,'source_url':'https://example.test/source'}]}}

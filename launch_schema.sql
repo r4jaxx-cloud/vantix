@@ -37,3 +37,5 @@ CREATE INDEX IF NOT EXISTS chat_message_sender ON chat_messages(sender_id,recipi
 CREATE TABLE IF NOT EXISTS chat_blocks(user_id INTEGER NOT NULL,blocked_id INTEGER NOT NULL,PRIMARY KEY(user_id,blocked_id));
 CREATE TABLE IF NOT EXISTS chat_reads(user_id INTEGER NOT NULL,thread TEXT NOT NULL,through INTEGER NOT NULL DEFAULT 0,PRIMARY KEY(user_id,thread));
 CREATE TABLE IF NOT EXISTS social_profiles(user_id INTEGER PRIMARY KEY,handle TEXT UNIQUE NOT NULL,bio TEXT NOT NULL DEFAULT '');
+
+CREATE TABLE IF NOT EXISTS professional_profiles(user_id INTEGER PRIMARY KEY,headline TEXT NOT NULL DEFAULT '',industry TEXT NOT NULL DEFAULT '',profession TEXT NOT NULL DEFAULT '');
