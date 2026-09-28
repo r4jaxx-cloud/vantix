@@ -1,0 +1,28 @@
+name: VIRTLINK preview checks
+on:
+  push:
+    branches: [feature/virtlink-preview]
+    paths: ['virtlink/**', '.github/workflows/virtlink-preview.yml']
+permissions:
+  contents: read
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: python virtlink/build.py
+      - run: node --check virtlink/app.js
+      - run: pip install playwright==1.58.0
+      - run: python -m playwright install --with-deps chromium
+      - run: python virtlink/test_preview.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: virtlink-design-previews
+          path: virtlink/*-preview.png
