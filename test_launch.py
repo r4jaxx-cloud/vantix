@@ -48,7 +48,7 @@ class Launch(unittest.TestCase):
   self.assertEqual(self.call('/api/saved/add',{'kind':'alerts','symbol':'BTC','value':1},alice)[0],200)
   self.assertEqual(self.call('/api/community/follow',{'user_id':aid,'active':True},bob)[0],200)
   viewed=self.call('/api/chat/profile?user_id='+str(aid),cookie=bob)[1]
-  self.assertEqual(viewed['followers'][0]['id'],bid);self.assertTrue(viewed['following_member']);self.assertTrue(viewed['can_message'])
+  self.assertEqual(viewed['followers'][0]['id'],bid);self.assertEqual(viewed['counts']['followers'],1);self.assertTrue(viewed['following_member']);self.assertTrue(viewed['can_message'])
   _,group,_=self.call('/api/chat/groups/create',{'name':'Policy discussion'},alice);gid=group['id']
   self.assertEqual(self.call('/api/chat/messages?group_id='+str(gid),cookie=bob)[0],403)
   payload={'group_id':gid,'body':'Group discussion','client_id':'group-fixture-00001'}
