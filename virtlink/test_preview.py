@@ -12,6 +12,25 @@ class PreviewTests(unittest.TestCase):
  @classmethod
  def tearDownClass(cls):
   cls.browser.close();cls.pw.stop();cls.http.shutdown();cls.http.server_close()
+ def test_account_gate(self):
+  page=self.browser.new_page(viewport={'width':390,'height':844});errors=[];auth_requests=[]
+  page.on('pageerror',lambda e:errors.append(str(e)))
+  page.route('https://challenges.cloudflare.com/**',lambda route:route.fulfill(content_type='text/javascript',body='window.turnstile={render:()=>1,reset:()=>{}};'))
+  page.route('https://hnoqhdqnvvndyipcoudi.supabase.co/**',lambda route:(auth_requests.append(route.request.url),route.abort()))
+  page.goto(self.url+'accounts.html')
+  page.get_by_text('Sign in with your existing test account.',exact=True).wait_for()
+  self.assertFalse(page.locator('#profilePanel').is_visible())
+  self.assertFalse(page.locator('#mfaPanel').is_visible())
+  page.get_by_label('Email',exact=True).fill('test@example.invalid')
+  page.get_by_label('Password',exact=True).fill('NotARealPassword')
+  page.get_by_role('button',name='Sign in securely',exact=True).click()
+  page.get_by_text('Complete the human check first.',exact=True).wait_for()
+  self.assertEqual(page.get_by_label('Password',exact=True).input_value(),'')
+  self.assertEqual(auth_requests,[])
+  self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'))
+  self.assertEqual(errors,[])
+  page.screenshot(path=str(ROOT/'accounts-mobile-preview.png'),full_page=True)
+  page.close()
  def test_preview(self):
   page=self.browser.new_page(viewport={'width':1440,'height':1000});errors=[]
   page.on('pageerror',lambda e:errors.append(str(e)))
