@@ -14,7 +14,9 @@ Applied 29 September 2026:
 
 ## Remaining work before enabling accounts
 
-The public Render site remains the labelled preview; no signup or messaging claim has been changed.
+The public Render site remains the labelled preview. A separate `accounts.html` provides test-only sign-in, Turnstile, TOTP enrolment/challenge, sign-out and private profile saving. It does not publish profiles to the sample social feed. No signup form, invitation/password setup, recovery or E2EE messaging is implemented. The SDK is pinned and locally bundled, with session-scoped auth storage. Eight service tests pass; these are not a substitute for real-account browser testing.
+
+The public Turnstile site key is configured. On 29 September the Auth endpoint rejected both missing and deliberately invalid CAPTCHA tokens. Email auto-confirm and anonymous auth were disabled. **The Auth API still reported `disable_signup: false`**: the site has no registration form, but the owner must disable new-user signup in Supabase before calling the service invite-only. The connected tools do not expose that setting.
 
 1. Configure dedicated transactional email and confirmed-email signup; test actual delivery and recovery. Never send a secret SMTP credential through chat or commit it.
 2. Create a Cloudflare Turnstile widget for `virtlink-preview.onrender.com`. Configure its secret in Supabase Authentication > Bot and Abuse Protection. Supply only its public site key to the frontend. Server rejection of missing/invalid tokens must be tested.
