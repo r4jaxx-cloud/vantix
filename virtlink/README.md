@@ -19,3 +19,9 @@ VANTIX production remains on the existing main branch. Do not merge this preview
 - Minimize collected profile details; do not request identity documents until a secure verification provider and retention policy are established.
 
 HTTPS protects transport. It is not end-to-end messaging encryption. No identity or E2EE claims may be made until the corresponding implementation is configured and verified.
+
+## Investor preview and policies
+
+Investor filters, proposal drafts and introduction review are local demonstrations. All investor examples are fictional and no one is approved or contacted. Added draft terms, privacy, community and investor-verification policies. These require the operator's legal identity, support contact, jurisdiction, supplier details and legal review before live use. No blanket liability exclusion or regulatory exemption is claimed.
+
+Live investor approval must use trusted server-side review records, reviewed evidence, expiry/revocation and per-request authorisation. Email verification or an editable investor profession alone must never grant investor rights.
