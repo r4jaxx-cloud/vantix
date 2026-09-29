@@ -15,5 +15,5 @@ body:has(.welcome) .headerActions{margin-left:auto}.headerActions .signupButton{
 
 /* Keep one primary navigation surface per view. */
 body:has(.layout) .topnav{display:none}
-body:has(.layout) .search{max-width:680px;margin-left:0}
+body:has(.layout) .search{max-width:360px;margin-left:0}
 body:has(.layout) .headerActions{margin-left:auto}
