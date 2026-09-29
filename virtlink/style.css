@@ -12,3 +12,8 @@
 body:has(.welcome) .headerActions{margin-left:auto}.headerActions .signupButton{background:linear-gradient(110deg,#0064ed,#087cff);border:1px solid #167eff}.headerActions .loginButton{border:1px solid #385e81;background:#0b1b2c}
 
 .investorFooter{margin-top:20px;padding-top:15px;border-top:1px solid var(--line)}.investorFilters{gap:8px}.investorFilters input{flex-basis:100%}.investorFilters select{min-width:0;flex:1}.policyContent{line-height:1.85}.policyContent h2{margin:22px 0 8px}.policyContent h2:first-child{margin-top:0}.policyContent p{margin:10px 0;color:#b5c8df}.policyContent li{margin:8px 0;color:#b5c8df}.policyContent a{color:#54b7ff;text-decoration:underline}.topnav{gap:16px}.topbar{gap:18px}.policyLinks{display:flex;flex-wrap:wrap;gap:14px;margin-top:22px}.policyLinks a{color:#9fcfff;font-size:12px}.welcome .policyLinks{padding:0 4px}@media(max-width:700px){.sectionHead>.between{align-items:start;flex-direction:column}.investorFooter{align-items:start;flex-direction:column}.investorFilters select{flex-basis:45%}.topbar{gap:10px}}
+
+/* Keep one primary navigation surface per view. */
+body:has(.layout) .topnav{display:none}
+body:has(.layout) .search{max-width:680px;margin-left:0}
+body:has(.layout) .headerActions{margin-left:auto}
