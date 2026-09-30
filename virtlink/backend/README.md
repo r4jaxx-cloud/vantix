@@ -38,3 +38,5 @@ Apply committed migrations in order to an empty, isolated Supabase project. The 
 - Authenticator enrollment is optional for ordinary profiles. If a verified factor exists, aal2 is still required by the database and client. Verification records retain mandatory aal2.
 - Initial email confirmation remains required. New-device email challenges/trusted-device records are requested but NOT implemented or enabled. Custom email delivery and a server-enforced device challenge are launch blockers. Never describe existing sessions as device verification.
 - Security advisor reports leaked-password protection disabled: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection . Remains a launch review item.
+
+Main website now loads the current saved profile through the same session and owner-only service. Login opens accounts.html; Edit profile opens the saved editor; Sign out revokes the local session and removes account identity from the main page. Real profile details are not copied into preview session storage. Feed posts, follows and messages remain session-only demos.

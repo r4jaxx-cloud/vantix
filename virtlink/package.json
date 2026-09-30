@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build:accounts": "esbuild account-page.js --bundle --minify --format=esm --outfile=dist/account-page.js",
+    "build:accounts": "esbuild account-page.js account-main.js --bundle --minify --format=esm --outdir=dist",
     "test": "node --test backend/account-service.test.js"
   },
   "dependencies": {

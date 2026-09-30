@@ -21,16 +21,35 @@ class PreviewTests(unittest.TestCase):
   page.get_by_text('Sign in with your existing test account.',exact=True).wait_for()
   self.assertFalse(page.locator('#profilePanel').is_visible())
   self.assertFalse(page.locator('#mfaPanel').is_visible())
-  page.get_by_label('Email',exact=True).fill('test@example.invalid')
-  page.get_by_label('Password',exact=True).fill('NotARealPassword')
+  page.get_by_label('Email (required)',exact=True).fill('test@example.invalid')
+  page.get_by_label('Password (required)',exact=True).fill('NotARealPassword')
   page.get_by_role('button',name='Sign in securely',exact=True).click()
   page.get_by_text('Complete the human check first.',exact=True).wait_for()
-  self.assertEqual(page.get_by_label('Password',exact=True).input_value(),'')
+  self.assertEqual(page.get_by_label('Password (required)',exact=True).input_value(),'')
   self.assertEqual(auth_requests,[])
   self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'))
   self.assertEqual(errors,[])
   page.screenshot(path=str(ROOT/'accounts-mobile-preview.png'),full_page=True)
   page.close()
+ def test_connected_profile(self):
+  page=self.browser.new_page();errors=[]
+  page.on('pageerror',lambda e:errors.append(str(e)))
+  # Exercise main-page identity rendering independently of real credentials.
+  page.route('**/account-main.js',lambda route:route.fulfill(content_type='text/javascript',body=''))
+  page.goto(self.url+'#profile')
+  row={'display_name':'Account <Example>','headline':'Engineer','profession':'Technology','location':'Example city','skills':'Coding, Design','looking_for':'Collaborators','bio':'Saved biography'}
+  page.evaluate('(row)=>window.dispatchEvent(new CustomEvent("virtlink-account",{detail:row}))',row)
+  self.assertTrue(page.get_by_role('heading',name='Account <Example>',exact=True).is_visible())
+  self.assertTrue(page.get_by_text('Saved biography',exact=True).is_visible())
+  self.assertEqual(page.locator('.loginButton').inner_text(),'Sign out')
+  page.goto(self.url+'#feed')
+  page.get_by_role('textbox',name='Write a post').fill('Test preview post')
+  page.get_by_role('button',name='Post',exact=True).click()
+  self.assertNotIn('Account <Example>',page.evaluate('sessionStorage.getItem("virtlink-preview-v1")'))
+  page.evaluate('window.dispatchEvent(new CustomEvent("virtlink-account",{detail:null}))')
+  self.assertEqual(page.locator('.loginButton').inner_text(),'Login')
+  self.assertNotIn('Account <Example>',page.locator('#app').inner_text())
+  self.assertEqual(errors,[]);page.close()
  def test_preview(self):
   page=self.browser.new_page(viewport={'width':1440,'height':1000});errors=[]
   page.on('pageerror',lambda e:errors.append(str(e)))
