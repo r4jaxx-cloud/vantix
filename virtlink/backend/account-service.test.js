@@ -1,0 +1,28 @@
+import {test} from 'node:test';
+import assert from 'node:assert/strict';
+import {accountService} from '../account-service.js';
+function fixture({level='aal2',confirmed=true,anonymous=false,exists=false}={}){
+  const calls=[];
+  const query={select(v){calls.push(['select',v]);return this},eq(k,v){calls.push(['eq',k,v]);return this},
+    async maybeSingle(){return {data:exists?{user_id:'owner'}:null}},
+    insert(row){calls.push(['insert',row]);return this},update(row){calls.push(['update',row]);return this},async single(){return {data:{user_id:'owner'}}}};
+  const client={auth:{getUser:async()=>({data:{user:{id:'owner',email_confirmed_at:confirmed?'date':null,is_anonymous:anonymous}}}),
+    mfa:{getAuthenticatorAssuranceLevel:async()=>({data:{currentLevel:level}})},
+    signInWithPassword:async args=>{calls.push(['login',args]);return {data:{}}},signOut:async args=>{calls.push(['logout',args]);return {error:null}}},
+    from(name){calls.push(['from',name]);return query}};
+  return {calls,service:accountService(client)};
+}
+test('missing human check never sends a password',async()=>{const f=fixture();await assert.rejects(f.service.signIn('a','secret',''));assert.equal(f.calls.length,0)});
+test('human token goes to Auth',async()=>{const f=fixture();await f.service.signIn('a','secret','token');assert.equal(f.calls[0][1].options.captchaToken,'token')});
+for(const setup of [{level:'aal1'},{confirmed:false},{anonymous:true}])test('profile access denied '+JSON.stringify(setup),async()=>{
+  const f=fixture(setup);await assert.rejects(f.service.load());await assert.rejects(f.service.save({}));assert.equal(f.calls.length,0);
+});
+test('profile inserts use verified user, discard privilege fields',async()=>{
+  const f=fixture();await f.service.save({user_id:'victim',username:'  Alice  ',display_name:'Alice',status:'approved',level:'investor',discoverable:true});
+  const row=f.calls.find(c=>c[0]==='insert')[1];assert.equal(row.user_id,'owner');assert.equal(row.username,'alice');assert.equal(row.status,undefined);assert.equal(row.level,undefined);assert.equal(row.discoverable,undefined);
+});
+test('updates scoped to verified owner and cannot change owner',async()=>{
+  const f=fixture({exists:true});await f.service.save({user_id:'victim',username:'alice',display_name:'Alice'});
+  assert.equal(f.calls.find(c=>c[0]==='update')[1].user_id,undefined);assert.equal(f.calls.filter(c=>c[0]==='eq'&&c[1]==='user_id'&&c[2]==='owner').length,2);
+});
+test('signout requests local session revocation',async()=>{const f=fixture();await f.service.signOut();assert.deepEqual(f.calls,[['logout',{scope:'local'}]])});
