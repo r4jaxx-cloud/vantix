@@ -5,6 +5,46 @@ const client=createClient('https://hnoqhdqnvvndyipcoudi.supabase.co','sb_publish
   auth:{storage:sessionStorage,storageKey:'virtlink-test-auth-v1',persistSession:true,autoRefreshToken:true,detectSessionInUrl:false}
 });
 const service=accountService(client);
+// Show validation beside each field, and focus the first error on submit.
+for(const form of document.querySelectorAll('.accountShell form')){
+  const fields=[...form.querySelectorAll('input,textarea')];
+  const errors=new Map();
+  for(const field of fields){
+    const label=field.closest('label');
+    const name=label?.firstChild.textContent.trim()||field.name;
+    const error=document.createElement('small');
+    error.id=form.id+'-'+field.name+'-error';error.hidden=true;
+    error.style.color='#ffb4b4';error.setAttribute('aria-live','polite');
+    field.after(error);errors.set(field,error);
+    field.setAttribute('aria-describedby', [field.getAttribute('aria-describedby'),error.id].filter(Boolean).join(' '));
+    if(field.required&&label){
+      label.firstChild.textContent+=' (required)';
+    }
+    const validate=()=>{
+      field.setCustomValidity('');
+      if(field.required&&!field.value.trim())field.setCustomValidity('Please enter your '+name.toLowerCase()+'.');
+      let message=field.validationMessage;
+      if(field.validity.patternMismatch&&field.name==='username')message='Use 3–30 lowercase letters, numbers or underscores, starting with a letter.';
+      if(field.validity.patternMismatch&&field.name==='code')message='Enter the six-digit code from your authenticator.';
+      error.textContent=message;error.hidden=!message;
+      if(message){field.setAttribute('aria-invalid','true');field.style.borderColor='#ff8d8d';}
+      else{field.removeAttribute('aria-invalid');field.style.removeProperty('border-color');}
+      return !message;
+    };
+    field.addEventListener('input',()=>{if(field.hasAttribute('aria-invalid'))validate();});
+    field.addEventListener('blur',()=>{if(field.value||field.hasAttribute('aria-invalid'))validate();});
+    field.validateAccountField=validate;
+  }
+  form.noValidate=true;
+  form.addEventListener('submit',event=>{
+    const invalid=fields.filter(field=>!field.validateAccountField());
+    if(invalid.length){event.preventDefault();event.stopImmediatePropagation();invalid[0].focus();}
+  },true);
+  form.addEventListener('reset',()=>{
+    for(const field of fields){field.setCustomValidity('');field.removeAttribute('aria-invalid');field.style.removeProperty('border-color');errors.get(field).hidden=true;errors.get(field).textContent='';}
+  });
+}
+
 let captchaToken='',widgetId=null,factorId=null,busy=false,revision=0;
 function status(text){$('#accountStatus').textContent=text;}
 function show(panel){for(const id of ['signinPanel','mfaPanel','profilePanel']) $('#'+id).hidden=id!==panel;}
