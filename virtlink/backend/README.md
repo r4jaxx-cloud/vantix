@@ -40,3 +40,9 @@ Apply committed migrations in order to an empty, isolated Supabase project. The 
 - Security advisor reports leaked-password protection disabled: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection . Remains a launch review item.
 
 Main website now loads the current saved profile through the same session and owner-only service. Login opens accounts.html; Edit profile opens the saved editor; Sign out revokes the local session and removes account identity from the main page. Real profile details are not copied into preview session storage. Feed posts, follows and messages remain session-only demos.
+
+
+## Member feed (private testing)
+Signed-in users with saved profiles can publish text posts, read the latest 50 member posts and delete their own. Server trigger copies author name/username from the private profile; clients cannot supply those fields. No anonymous feed access. Other profile fields stay owner-only. Posts are persistent; follows/comments/messages remain previews. Refresh loads new posts; no automatic realtime subscription yet. Author names are publication-time snapshots.
+The insert guard limits remaining posts to 5/minute and 50/day; deleting posts releases that count. This is a basic test-stage guard, not a durable anti-spam ledger. Public signup remains closed until moderation/report/block workflows and launch requirements are complete.
+Validation: backend/test_feed.sql uses rollback-only accounts to check member reads, author spoof prevention, column permissions, owner-only deletion, MFA, private profile isolation, anonymous denial and the posting guard. Browser tests cover composer events, text escaping, deletion confirmation and sign-out clearing. Real multi-user sign-in tests are still outstanding.
