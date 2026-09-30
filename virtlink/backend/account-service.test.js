@@ -1,13 +1,13 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {accountService} from '../account-service.js';
-function fixture({level='aal2',confirmed=true,anonymous=false,exists=false}={}){
+function fixture({level='aal2',nextLevel='aal2',confirmed=true,anonymous=false,exists=false}={}){
   const calls=[];
   const query={select(v){calls.push(['select',v]);return this},eq(k,v){calls.push(['eq',k,v]);return this},
     async maybeSingle(){return {data:exists?{user_id:'owner'}:null}},
     insert(row){calls.push(['insert',row]);return this},update(row){calls.push(['update',row]);return this},async single(){return {data:{user_id:'owner'}}}};
   const client={auth:{getUser:async()=>({data:{user:{id:'owner',email_confirmed_at:confirmed?'date':null,is_anonymous:anonymous}}}),
-    mfa:{getAuthenticatorAssuranceLevel:async()=>({data:{currentLevel:level}})},
+    mfa:{getAuthenticatorAssuranceLevel:async()=>({data:{currentLevel:level,nextLevel}})},
     signInWithPassword:async args=>{calls.push(['login',args]);return {data:{}}},signOut:async args=>{calls.push(['logout',args]);return {error:null}}},
     from(name){calls.push(['from',name]);return query}};
   return {calls,service:accountService(client)};
@@ -26,3 +26,5 @@ test('updates scoped to verified owner and cannot change owner',async()=>{
   assert.equal(f.calls.find(c=>c[0]==='update')[1].user_id,undefined);assert.equal(f.calls.filter(c=>c[0]==='eq'&&c[1]==='user_id'&&c[2]==='owner').length,2);
 });
 test('signout requests local session revocation',async()=>{const f=fixture();await f.service.signOut();assert.deepEqual(f.calls,[['logout',{scope:'local'}]])});
+
+test('confirmed users without MFA can use their profile',async()=>{const f=fixture({level:'aal1',nextLevel:'aal1'});await f.service.load();await f.service.save({username:'alice',display_name:'Alice'});assert.ok(f.calls.some(c=>c[0]==='insert'));});

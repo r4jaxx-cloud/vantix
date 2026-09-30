@@ -45,6 +45,16 @@ do $$ begin
 end $$;
 select set_config('request.jwt.claims',jsonb_build_object('sub',current_setting('virtlink.test_a'),'aal','aal1','role','authenticated')::text,true);
 do $$ begin
+  if not exists(select 1 from public.virtlink_profiles) then raise exception 'Optional MFA blocked profile'; end if;
+  update public.virtlink_profiles set display_name='No MFA enabled';
+  if not found then raise exception 'Optional MFA blocked write'; end if;
+  if exists(select 1 from public.virtlink_verifications) then raise exception 'Verification MFA gate weakened'; end if;
+end $$;
+reset role;
+insert into auth.mfa_factors(id,user_id,factor_type,status,created_at,updated_at)
+values(gen_random_uuid(),current_setting('virtlink.test_a')::uuid,'totp','verified',now(),now());
+set local role authenticated;
+do $$ begin
   if exists(select 1 from public.virtlink_profiles) then raise exception 'MFA bypass'; end if;
   update public.virtlink_profiles set display_name='MFA bypass';
   if found then raise exception 'Write without MFA'; end if;

@@ -31,3 +31,10 @@ Discovery remains private by default, including rows marked discoverable, until 
 ## Reproduction
 
 Apply committed migrations in order to an empty, isolated Supabase project. The remote migration service assigns its own timestamp; filenames should match its recorded versions. Execute the test SQL as database owner, then run Supabase security advisors. Never run these against VANTIX or another project.
+
+
+## September 30 account flow update
+- Saving opens a read-only view of the real saved profile; Edit profile returns to the form.
+- Authenticator enrollment is optional for ordinary profiles. If a verified factor exists, aal2 is still required by the database and client. Verification records retain mandatory aal2.
+- Initial email confirmation remains required. New-device email challenges/trusted-device records are requested but NOT implemented or enabled. Custom email delivery and a server-enforced device challenge are launch blockers. Never describe existing sessions as device verification.
+- Security advisor reports leaked-password protection disabled: https://supabase.com/docs/guides/auth/password-security#password-strength-and-leaked-password-protection . Remains a launch review item.

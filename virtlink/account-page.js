@@ -45,10 +45,10 @@ for(const form of document.querySelectorAll('.accountShell form')){
   });
 }
 
-let captchaToken='',widgetId=null,factorId=null,busy=false,revision=0;
+let captchaToken='',widgetId=null,factorId=null,busy=false,revision=0,savedRow=null,mfaEnabled=false;
 function status(text){$('#accountStatus').textContent=text;}
-function show(panel){for(const id of ['signinPanel','mfaPanel','profilePanel']) $('#'+id).hidden=id!==panel;}
-function clearPrivate(){factorId=null;$('#savedProfile').reset();$('#mfaForm').reset();$('#mfaSecret').textContent='';$('#mfaQr').removeAttribute('src');$('#enrollDetails').hidden=true;$('#mfaForm').hidden=true;}
+function show(panel){for(const id of ['signinPanel','mfaPanel','profilePanel','profileView']) $('#'+id).hidden=id!==panel;}
+function clearPrivate(){savedRow=null;$('#profileName').textContent='';$('#profileUsername').textContent='';$('#profileDetails').replaceChildren();factorId=null;$('#savedProfile').reset();$('#mfaForm').reset();$('#mfaSecret').textContent='';$('#mfaQr').removeAttribute('src');$('#enrollDetails').hidden=true;$('#mfaForm').hidden=true;}
 function resetCaptcha(){captchaToken='';if(window.turnstile&&widgetId!==null)window.turnstile.reset(widgetId);}
 function humanCheck(){
   if(window.turnstile&&widgetId===null)widgetId=window.turnstile.render('#humanCheck',{
@@ -64,17 +64,41 @@ async function refresh(){
   if(!data.session){show('signinPanel');$('#accountLogout').hidden=true;humanCheck();status('Sign in with your existing test account.');return;}
   await service.user();$('#accountLogout').hidden=false;
   const assurance=await client.auth.mfa.getAuthenticatorAssuranceLevel();if(assurance.error)throw assurance.error;
-  if(assurance.data.currentLevel==='aal2'){
-    const row=await service.load();if(current!==revision)return;show('profilePanel');
-    if(row)for(const el of $('#savedProfile').elements)if(el.name&&row[el.name]!=null)el.value=row[el.name];
-    status('Email confirmed · Authenticator verified');return;
+  mfaEnabled=assurance.data.nextLevel==='aal2';
+  if(assurance.data.currentLevel==='aal2'||assurance.data.nextLevel==='aal1'){
+    const row=await service.load();if(current!==revision)return;
+    if(row){savedRow=row;renderProfile(row);}else{show('profilePanel');status('Complete your profile. Authenticator setup is optional.');}
+    return;
   }
   const factors=await client.auth.mfa.listFactors();if(factors.error)throw factors.error;
   if(current!==revision)return;
   factorId=factors.data.totp.find(f=>f.status==='verified')?.id??null;
   $('#enrollButton').hidden=Boolean(factorId);$('#mfaForm').hidden=!factorId;
-  show('mfaPanel');status(factorId?'Enter your authenticator code.':'Set up an authenticator to continue.');
+  $('#cancelMfa').hidden=true;show('mfaPanel');status(factorId?'Enter your authenticator code.':'Set up an authenticator to continue.');
 }
+function renderProfile(row){
+  savedRow=row;show('profileView');
+  $('#profileName').textContent=row.display_name;$('#profileUsername').textContent='@'+row.username;
+  $('#profileDetails').replaceChildren();
+  for(const [key,label] of Object.entries({headline:'Headline',profession:'Profession',location:'Location',skills:'Skills',looking_for:'Looking for',bio:'About you'})){
+    if(!row[key])continue;
+    const term=document.createElement('dt'),value=document.createElement('dd');
+    term.textContent=label;value.textContent=row[key];$('#profileDetails').append(term,value);
+  }
+  $('#securitySummary').textContent=mfaEnabled?'Authenticator protection is enabled.':'Email and password sign-in. You can add an authenticator for extra protection.';
+  $('#optionalMfa').hidden=mfaEnabled;status('Your profile');$('#profileName').focus();
+}
+$('#editProfile').addEventListener('click',()=>{
+  show('profilePanel');for(const el of $('#savedProfile').elements)if(el.name&&savedRow?.[el.name]!=null)el.value=savedRow[el.name];
+  status('Edit your profile');$('#savedProfile').elements.username.focus();
+});
+$('#optionalMfa').addEventListener('click',()=>{
+  show('mfaPanel');$('#enrollButton').hidden=false;$('#cancelMfa').hidden=false;status('Optional authenticator setup');
+});
+$('#cancelMfa').addEventListener('click',()=>run(async()=>{
+  if(factorId){const result=await client.auth.mfa.unenroll({factorId});if(result.error)throw result.error;}
+  await refresh();
+}));
 async function run(work){
   if(busy)return;busy=true;const current=revision;
   document.querySelectorAll('button').forEach(b=>b.disabled=true);
@@ -105,7 +129,7 @@ $('#mfaForm').addEventListener('submit',e=>{e.preventDefault();run(async()=>{
   await refresh();
 });});
 $('#savedProfile').addEventListener('submit',e=>{e.preventDefault();run(async()=>{
-  await service.save(Object.fromEntries(new FormData(e.currentTarget)));status('Your profile is saved privately in VIRTLINK.');
+  const row=await service.save(Object.fromEntries(new FormData(e.currentTarget)));renderProfile(row);status('Profile saved.');
 });});
 $('#accountLogout').addEventListener('click',()=>run(async()=>{await service.signOut();clearPrivate();await refresh();}));
 client.auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT'){

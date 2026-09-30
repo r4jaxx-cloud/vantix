@@ -9,7 +9,7 @@ export function accountService(client) {
   async function ready() {
     const u=await user();
     const assurance=unwrap(await client.auth.mfa.getAuthenticatorAssuranceLevel());
-    if(assurance.currentLevel!=='aal2') throw new Error('Complete your authenticator check first.');
+    if(assurance.currentLevel!=='aal2'&&assurance.nextLevel!=='aal1') throw new Error('Complete your authenticator check first.');
     return u;
   }
   const fields=['username','display_name','headline','bio','location','profession','skills','looking_for'];
