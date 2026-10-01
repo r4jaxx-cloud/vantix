@@ -12,6 +12,12 @@ VIRTLINK welcomes ordinary people, students, jobseekers and professionals. Stron
 - Mock browser tests and rollback SQL tests do not prove real email delivery, CAPTCHA or multi-user operation.
 - Update this file after each completed batch. No false live, verified or encrypted claims.
 
+## Current checkpoint
+
+Working on: account/profile reliability. Implemented clearer save errors, retained drafts on failure, separate headline/profession values and header photo display. Regression tests exercise edit, submit payload and retry after failure.
+
+Next unresolved gate: real two-account sign-in, save/reload and email/recovery checks. Public signup remains disabled; no claim of completed real email or recovery testing.
+
 ## 1. Accounts and profile — first priority
 
 - [x] Sign-in UI, field validation and human-check integration implemented.

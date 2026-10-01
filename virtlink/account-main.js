@@ -73,6 +73,6 @@ let profileSaving=false;
 window.addEventListener('virtlink-profile-save',async event=>{
  if(profileSaving)return;profileSaving=true;
  try{const row=await service.save(event.detail);publish(row);window.dispatchEvent(new CustomEvent('virtlink-profile-result',{detail:{saved:true}}));}
- catch{window.dispatchEvent(new CustomEvent('virtlink-profile-result',{detail:{error:'Could not save. Check your username and connection, then try again.'}}));}
+ catch(error){const message=error.code==='23505'?'That username is already taken. Choose another.':error.code==='42501'?'Your session needs checking. Open Account settings and sign in again.':'Could not save. Your changes are still here. Check your connection and try again.';window.dispatchEvent(new CustomEvent('virtlink-profile-result',{detail:{error:message}}));}
  finally{profileSaving=false;}
 });

@@ -64,6 +64,13 @@ class PreviewTests(unittest.TestCase):
   self.assertEqual(page.locator('#profileEditorFrame').count(),0)
   self.assertTrue(page.locator('#memberPhotoPreview').is_visible())
   self.assertEqual(page.locator('#memberPhotoPreview').get_attribute('src'),'profile-placeholder.svg')
+  page.get_by_label('Headline',exact=True).fill('Updated headline')
+  page.evaluate('window.profileRequest=null;window.addEventListener("virtlink-profile-save",e=>window.profileRequest=e.detail)')
+  page.get_by_role('button',name='Save changes',exact=True).click()
+  self.assertEqual(page.evaluate('window.profileRequest.headline'),'Updated headline')
+  page.evaluate('window.dispatchEvent(new CustomEvent("virtlink-profile-result",{detail:{error:"Username unavailable"}}))')
+  self.assertEqual(page.get_by_label('Headline',exact=True).input_value(),'Updated headline')
+  self.assertTrue(page.get_by_role('button',name='Save changes',exact=True).is_enabled())
   page.get_by_role('button',name='Cancel',exact=True).click()
 
   page.goto(self.url+'#feed')
