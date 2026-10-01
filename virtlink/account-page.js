@@ -172,3 +172,8 @@ function updatePhotoCrop(){
  avatarData=result;$('#photoPreview').src=result;$('#photoPreview').hidden=false;$('#photoPlaceholder').hidden=true;
 }
 $('#photoZoom').addEventListener('input',updatePhotoCrop);
+
+$('#signoutAllDevices').addEventListener('click',()=>{
+ if(!confirm('Sign out on every device, including this one?'))return;
+ run(async()=>{await service.signOutAll();revision++;clearPrivate();await refresh();status('All sessions signed out. Sign in again to continue.');});
+});

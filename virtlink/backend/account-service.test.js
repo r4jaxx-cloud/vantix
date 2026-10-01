@@ -47,3 +47,10 @@ test('same-session save succeeds and duplicate submissions are suppressed',async
  const pending=save({});await save({});resolve({user_id:'owner'});await pending;
  assert.equal(calls,1);assert.deepEqual(published,[{user_id:'owner'}]);assert.deepEqual(results,[{saved:true}]);
 });
+
+test('sign out everywhere explicitly revokes global scope',async()=>{
+ const f=fixture();await f.service.signOutAll();assert.deepEqual(f.calls.filter(c=>c[0]==='logout'),[['logout',{scope:'global'}]]);
+});
+test('unconfirmed identity cannot request account-wide revocation',async()=>{
+ const f=fixture({confirmed:false});await assert.rejects(f.service.signOutAll());assert.equal(f.calls.length,0);
+});

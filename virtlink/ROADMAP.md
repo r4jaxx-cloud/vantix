@@ -14,7 +14,7 @@ VIRTLINK welcomes ordinary people, students, jobseekers and professionals. Stron
 
 ## Current checkpoint
 
-Working on: critical account/session isolation. A delayed profile-save response could restore private UI data after sign-out; added session-revision guards and tests for sign-out/account changes during requests. No cosmetic work is prioritized.
+Working on: critical account/session isolation and account-wide sign-out. Added an explicit global sign-out control with confirmation; SDK scope tests added. Real two-device sign-out acceptance remains unverified. A delayed profile-save response could restore private UI data after sign-out; added session-revision guards and tests for sign-out/account changes during requests. No cosmetic work is prioritized.
 
 Next: account recovery/email delivery (blocked by sender configuration), then server-enforced reporting/blocking/moderation. Real two-account acceptance checks remain open. Public signup remains disabled.
 

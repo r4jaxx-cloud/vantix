@@ -33,6 +33,7 @@ export function accountService(client) {
         : client.from('virtlink_profiles').insert({...row,user_id:u.id});
       return unwrap(await query.select('*').single());
     },
+    async signOutAll() { await user(); const {error}=await client.auth.signOut({scope:'global'}); if(error) throw error; },
     async signOut() { const {error}=await client.auth.signOut({scope:'local'}); if(error) throw error; }
   };
 }
