@@ -1,3 +1,4 @@
+import {profileSaver} from './profile-save.js';
 import {createClient} from '@supabase/supabase-js';
 import {feedService} from './feed-service.js';
 import {accountService} from './account-service.js';
@@ -69,10 +70,6 @@ window.addEventListener('virtlink-comment-delete',async event=>{
 
 window.addEventListener('virtlink-account-refresh',refresh);
 
-let profileSaving=false;
-window.addEventListener('virtlink-profile-save',async event=>{
- if(profileSaving)return;profileSaving=true;
- try{const row=await service.save(event.detail);publish(row);window.dispatchEvent(new CustomEvent('virtlink-profile-result',{detail:{saved:true}}));}
- catch(error){const message=error.code==='23505'?'That username is already taken. Choose another.':error.code==='42501'?'Your session needs checking. Open Account settings and sign in again.':'Could not save. Your changes are still here. Check your connection and try again.';window.dispatchEvent(new CustomEvent('virtlink-profile-result',{detail:{error:message}}));}
- finally{profileSaving=false;}
-});
+const saveProfile=profileSaver({save:input=>service.save(input),revision:()=>revision,publish,
+ result:detail=>window.dispatchEvent(new CustomEvent('virtlink-profile-result',{detail}))});
+window.addEventListener('virtlink-profile-save',event=>saveProfile(event.detail));

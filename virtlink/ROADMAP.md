@@ -14,9 +14,11 @@ VIRTLINK welcomes ordinary people, students, jobseekers and professionals. Stron
 
 ## Current checkpoint
 
-Working on: account/profile reliability. Implemented clearer save errors, retained drafts on failure, separate headline/profession values and header photo display. Regression tests exercise edit, submit payload and retry after failure.
+Working on: critical account/session isolation. A delayed profile-save response could restore private UI data after sign-out; added session-revision guards and tests for sign-out/account changes during requests. No cosmetic work is prioritized.
 
-Next unresolved gate: real two-account sign-in, save/reload and email/recovery checks. Public signup remains disabled; no claim of completed real email or recovery testing.
+Next: account recovery/email delivery (blocked by sender configuration), then server-enforced reporting/blocking/moderation. Real two-account acceptance checks remain open. Public signup remains disabled.
+
+Known security setting: leaked-password protection disabled in Supabase; remains unresolved. No claim of a complete security audit.
 
 ## 1. Accounts and profile — first priority
 

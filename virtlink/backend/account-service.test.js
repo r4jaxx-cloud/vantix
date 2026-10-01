@@ -28,3 +28,22 @@ test('updates scoped to verified owner and cannot change owner',async()=>{
 test('signout requests local session revocation',async()=>{const f=fixture();await f.service.signOut();assert.deepEqual(f.calls,[['logout',{scope:'local'}]])});
 
 test('confirmed users without MFA can use their profile',async()=>{const f=fixture({level:'aal1',nextLevel:'aal1'});await f.service.load();await f.service.save({username:'alice',display_name:'Alice'});assert.ok(f.calls.some(c=>c[0]==='insert'));});
+
+import {profileSaver} from '../profile-save.js';
+test('sign-out during profile save cannot restore private identity',async()=>{
+ let revision=1,resolve;const published=[],results=[];
+ const save=profileSaver({save:()=>new Promise(r=>resolve=r),revision:()=>revision,publish:r=>published.push(r),result:r=>results.push(r)});
+ const pending=save({display_name:'Private'});revision++;resolve({display_name:'Private'});await pending;
+ assert.deepEqual(published,[]);assert.deepEqual(results,[]);
+});
+test('old-session save failure cannot affect a new session',async()=>{
+ let revision=1,reject;const results=[];
+ const save=profileSaver({save:()=>new Promise((_,r)=>reject=r),revision:()=>revision,publish:()=>assert.fail(),result:r=>results.push(r)});
+ const pending=save({});revision++;reject({code:'42501'});await pending;assert.deepEqual(results,[]);
+});
+test('same-session save succeeds and duplicate submissions are suppressed',async()=>{
+ let resolve,calls=0;const published=[],results=[];
+ const save=profileSaver({save:()=>{calls++;return new Promise(r=>resolve=r)},revision:()=>1,publish:r=>published.push(r),result:r=>results.push(r)});
+ const pending=save({});await save({});resolve({user_id:'owner'});await pending;
+ assert.equal(calls,1);assert.deepEqual(published,[{user_id:'owner'}]);assert.deepEqual(results,[{saved:true}]);
+});
