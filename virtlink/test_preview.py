@@ -83,6 +83,13 @@ class PreviewTests(unittest.TestCase):
   page.get_by_role('button',name='Delete',exact=True).click()
   self.assertTrue(page.get_by_role('button',name='Delete post',exact=True).is_visible())
   page.get_by_role('button',name='Close dialog').click()
+  self.assertEqual(page.locator('.rightRail .person').count(),0)
+  for route in ['messages','investors','network','profile/emma','world']:
+   page.goto(self.url+'#'+route)
+   self.assertTrue(page.get_by_role('heading',name='Not available in member testing',exact=True).is_visible())
+   self.assertEqual(page.locator('#messageForm').count(),0)
+  page.goto(self.url+'#profile')
+  self.assertNotIn('Communities',page.locator('main').inner_text())
   page.evaluate('window.dispatchEvent(new CustomEvent("virtlink-account",{detail:null}))')
   self.assertEqual(page.locator('.loginButton').inner_text(),'Login')
   self.assertNotIn('Account <Example>',page.locator('#app').inner_text())
