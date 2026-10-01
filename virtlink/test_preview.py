@@ -62,6 +62,8 @@ class PreviewTests(unittest.TestCase):
   self.assertTrue(page.get_by_label('Display name',exact=True).is_visible())
   self.assertEqual(page.get_by_label('Username',exact=True).input_value(),'example')
   self.assertEqual(page.locator('#profileEditorFrame').count(),0)
+  self.assertTrue(page.locator('#memberPhotoPreview').is_visible())
+  self.assertEqual(page.locator('#memberPhotoPreview').get_attribute('src'),'profile-placeholder.svg')
   page.get_by_role('button',name='Cancel',exact=True).click()
 
   page.goto(self.url+'#feed')
