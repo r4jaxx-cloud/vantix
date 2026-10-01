@@ -45,10 +45,11 @@ for(const form of document.querySelectorAll('.accountShell form')){
   });
 }
 
+let photoBitmap=null;
 let captchaToken='',widgetId=null,factorId=null,busy=false,revision=0,savedRow=null,mfaEnabled=false,avatarData='',photoProcessing=false,finishSetup=false;
 function status(text){$('#accountStatus').textContent=text;}
 function show(panel){for(const id of ['signinPanel','mfaPanel','profilePanel','profileView','registrationPanel']) $('#'+id).hidden=id!==panel;}
-function clearPrivate(){avatarData='';$('#photoError').hidden=true;$('#savedPhoto').removeAttribute('src');$('#savedPhoto').hidden=true;$('#photoPreview').removeAttribute('src');$('#photoPreview').hidden=true;$('#photoPlaceholder').hidden=false;savedRow=null;$('#profileName').textContent='';$('#profileUsername').textContent='';$('#profileDetails').replaceChildren();factorId=null;$('#savedProfile').reset();$('#mfaForm').reset();$('#mfaSecret').textContent='';$('#mfaQr').removeAttribute('src');$('#enrollDetails').hidden=true;$('#mfaForm').hidden=true;}
+function clearPrivate(){if(photoBitmap){photoBitmap.close();photoBitmap=null;}$('#photoTools').hidden=true;$('#cancelProfileEdit').hidden=true;$('#profileEditorTitle').textContent='Create your profile';avatarData='';$('#photoError').hidden=true;$('#savedPhoto').removeAttribute('src');$('#savedPhoto').hidden=true;$('#photoPreview').removeAttribute('src');$('#photoPreview').hidden=true;$('#photoPlaceholder').hidden=false;savedRow=null;$('#profileName').textContent='';$('#profileUsername').textContent='';$('#profileDetails').replaceChildren();factorId=null;$('#savedProfile').reset();$('#mfaForm').reset();$('#mfaSecret').textContent='';$('#mfaQr').removeAttribute('src');$('#enrollDetails').hidden=true;$('#mfaForm').hidden=true;}
 function resetCaptcha(){captchaToken='';if(window.turnstile&&widgetId!==null)window.turnstile.reset(widgetId);}
 function humanCheck(){
   if(window.turnstile&&widgetId===null)widgetId=window.turnstile.render('#humanCheck',{
@@ -89,10 +90,11 @@ function renderProfile(row){
   $('#optionalMfa').hidden=mfaEnabled;status('Your profile');$('#profileName').focus();
 }
 $('#editProfile').addEventListener('click',()=>{
-  show('profilePanel');for(const el of $('#savedProfile').elements)if(el.name&&savedRow?.[el.name]!=null)el.value=savedRow[el.name];
+  show('profilePanel');$('#profileEditorTitle').textContent='Edit your profile';$('#cancelProfileEdit').hidden=false;for(const el of $('#savedProfile').elements)if(el.name&&savedRow?.[el.name]!=null)el.value=savedRow[el.name];
   $('#photoPreview').hidden=!avatarData;$('#photoPlaceholder').hidden=Boolean(avatarData);if(avatarData)$('#photoPreview').src=avatarData;$('#setupAuthenticator').checked=mfaEnabled;$('#setupAuthenticator').disabled=mfaEnabled;
   status('Edit your profile');$('#savedProfile').elements.username.focus();
 });
+$('#cancelProfileEdit').addEventListener('click',()=>{if(savedRow)renderProfile(savedRow);});
 $('#optionalMfa').addEventListener('click',()=>{
   show('mfaPanel');$('#enrollButton').hidden=false;$('#cancelMfa').hidden=false;status('Optional authenticator setup');
 });
@@ -150,11 +152,19 @@ $('#photoInput').addEventListener('change',async event=>{
  const file=event.target.files[0];if(!file)return;photoProcessing=true;$('#photoError').hidden=true;
  try{
   if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)throw new Error('Choose a JPG, PNG or WebP picture under 10 MB.');
-  const bitmap=await createImageBitmap(file);const canvas=document.createElement('canvas');canvas.width=canvas.height=256;
-  const context=canvas.getContext('2d');context.fillStyle='#ffffff';context.fillRect(0,0,256,256);
-  const side=Math.min(bitmap.width,bitmap.height);context.drawImage(bitmap,(bitmap.width-side)/2,(bitmap.height-side)/2,side,side,0,0,256,256);bitmap.close();
-  const result=canvas.toDataURL('image/jpeg',0.82);if(result.length>100000)throw new Error('Choose a smaller picture.');
-  avatarData=result;$('#photoPreview').src=result;$('#photoPreview').hidden=false;$('#photoPlaceholder').hidden=true;$('#photoInput').removeAttribute('aria-invalid');
+  const bitmap=await createImageBitmap(file);if(photoBitmap)photoBitmap.close();photoBitmap=bitmap;
+  $('#photoZoom').value='1';updatePhotoCrop();$('#photoTools').hidden=false;$('#photoInput').removeAttribute('aria-invalid');
  }catch(error){$('#photoError').textContent=error.message||'Could not read this picture. Try another file.';$('#photoError').hidden=false;}
  finally{photoProcessing=false;}
 });
+
+function updatePhotoCrop(){
+ if(!photoBitmap)return;
+ const canvas=document.createElement('canvas');canvas.width=canvas.height=256;
+ const context=canvas.getContext('2d');context.fillStyle='#ffffff';context.fillRect(0,0,256,256);
+ const side=Math.min(photoBitmap.width,photoBitmap.height)/Number($('#photoZoom').value);
+ context.drawImage(photoBitmap,(photoBitmap.width-side)/2,(photoBitmap.height-side)/2,side,side,0,0,256,256);
+ const result=canvas.toDataURL('image/jpeg',0.82);if(result.length>100000)throw new Error('Choose a smaller picture.');
+ avatarData=result;$('#photoPreview').src=result;$('#photoPreview').hidden=false;$('#photoPlaceholder').hidden=true;
+}
+$('#photoZoom').addEventListener('input',updatePhotoCrop);
