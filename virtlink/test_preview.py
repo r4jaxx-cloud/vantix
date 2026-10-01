@@ -53,11 +53,17 @@ class PreviewTests(unittest.TestCase):
   # Exercise main-page identity rendering independently of real credentials.
   page.route('**/account-main.js',lambda route:route.fulfill(content_type='text/javascript',body=''))
   page.goto(self.url+'#profile')
-  row={'user_id':'owner','display_name':'Account <Example>','headline':'Engineer','profession':'Technology','location':'Example city','skills':'Coding, Design','looking_for':'Collaborators','bio':'Saved biography'}
+  row={'user_id':'owner','username':'example','display_name':'Account <Example>','headline':'Engineer','profession':'Technology','location':'Example city','skills':'Coding, Design','looking_for':'Collaborators','bio':'Saved biography'}
   page.evaluate('(row)=>window.dispatchEvent(new CustomEvent("virtlink-account",{detail:row}))',row)
   self.assertTrue(page.get_by_role('heading',name='Account <Example>',exact=True).is_visible())
   self.assertTrue(page.get_by_text('Saved biography',exact=True).is_visible())
   self.assertEqual(page.locator('.loginButton').inner_text(),'Sign out')
+  page.get_by_role('button',name='Edit profile',exact=True).click()
+  self.assertTrue(page.get_by_label('Display name',exact=True).is_visible())
+  self.assertEqual(page.get_by_label('Username',exact=True).input_value(),'example')
+  self.assertEqual(page.locator('#profileEditorFrame').count(),0)
+  page.get_by_role('button',name='Cancel',exact=True).click()
+
   page.goto(self.url+'#feed')
   page.get_by_role('textbox',name='Write a member post').fill('A member idea')
   page.evaluate('window.postRequest=null;window.addEventListener("virtlink-post-create",e=>window.postRequest=e.detail)')

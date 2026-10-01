@@ -68,3 +68,11 @@ window.addEventListener('virtlink-comment-delete',async event=>{
 });
 
 window.addEventListener('virtlink-account-refresh',refresh);
+
+let profileSaving=false;
+window.addEventListener('virtlink-profile-save',async event=>{
+ if(profileSaving)return;profileSaving=true;
+ try{const row=await service.save(event.detail);publish(row);window.dispatchEvent(new CustomEvent('virtlink-profile-result',{detail:{saved:true}}));}
+ catch{window.dispatchEvent(new CustomEvent('virtlink-profile-result',{detail:{error:'Could not save. Check your username and connection, then try again.'}}));}
+ finally{profileSaving=false;}
+});
