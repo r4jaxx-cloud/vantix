@@ -20,8 +20,12 @@ insert into public.virtlink_profiles (user_id,username,display_name)
 values (current_setting('virtlink.test_a')::uuid, 'a_' || replace(current_setting('virtlink.test_a'),'-','')::varchar(20), 'Test A');
 do $$ begin
   if (select count(*) from public.virtlink_profiles) <> 1 then raise exception 'Owner cannot read profile'; end if;
-  update public.virtlink_profiles set display_name='Updated A';
+  update public.virtlink_profiles set display_name='Updated A',avatar_data='data:image/jpeg;base64,/9j/';
   if not found then raise exception 'Owner cannot update profile'; end if;
+  begin
+    update public.virtlink_profiles set avatar_data='data:image/svg+xml,<svg/>';
+    raise exception 'Non-JPEG avatar permitted';
+  exception when check_violation then null; end;
   begin
     insert into public.virtlink_profiles (user_id,username,display_name)
     values (current_setting('virtlink.test_b')::uuid,'spoofed','Spoof');

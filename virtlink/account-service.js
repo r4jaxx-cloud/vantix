@@ -12,7 +12,7 @@ export function accountService(client) {
     if(assurance.currentLevel!=='aal2'&&assurance.nextLevel!=='aal1') throw new Error('Complete your authenticator check first.');
     return u;
   }
-  const fields=['username','display_name','headline','bio','location','profession','skills','looking_for'];
+  const fields=['username','display_name','headline','bio','location','profession','skills','looking_for','avatar_data'];
   return {
     user,
     async signIn(email,password,captchaToken) {

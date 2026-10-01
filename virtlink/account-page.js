@@ -45,10 +45,10 @@ for(const form of document.querySelectorAll('.accountShell form')){
   });
 }
 
-let captchaToken='',widgetId=null,factorId=null,busy=false,revision=0,savedRow=null,mfaEnabled=false;
+let captchaToken='',widgetId=null,factorId=null,busy=false,revision=0,savedRow=null,mfaEnabled=false,avatarData='',photoProcessing=false,finishSetup=false;
 function status(text){$('#accountStatus').textContent=text;}
-function show(panel){for(const id of ['signinPanel','mfaPanel','profilePanel','profileView']) $('#'+id).hidden=id!==panel;}
-function clearPrivate(){savedRow=null;$('#profileName').textContent='';$('#profileUsername').textContent='';$('#profileDetails').replaceChildren();factorId=null;$('#savedProfile').reset();$('#mfaForm').reset();$('#mfaSecret').textContent='';$('#mfaQr').removeAttribute('src');$('#enrollDetails').hidden=true;$('#mfaForm').hidden=true;}
+function show(panel){for(const id of ['signinPanel','mfaPanel','profilePanel','profileView','registrationPanel']) $('#'+id).hidden=id!==panel;}
+function clearPrivate(){avatarData='';$('#photoError').hidden=true;$('#savedPhoto').removeAttribute('src');$('#savedPhoto').hidden=true;$('#photoPreview').removeAttribute('src');$('#photoPreview').hidden=true;$('#photoPlaceholder').hidden=false;savedRow=null;$('#profileName').textContent='';$('#profileUsername').textContent='';$('#profileDetails').replaceChildren();factorId=null;$('#savedProfile').reset();$('#mfaForm').reset();$('#mfaSecret').textContent='';$('#mfaQr').removeAttribute('src');$('#enrollDetails').hidden=true;$('#mfaForm').hidden=true;}
 function resetCaptcha(){captchaToken='';if(window.turnstile&&widgetId!==null)window.turnstile.reset(widgetId);}
 function humanCheck(){
   if(window.turnstile&&widgetId===null)widgetId=window.turnstile.render('#humanCheck',{
@@ -64,7 +64,7 @@ async function refresh(){
   if(!data.session){show('signinPanel');$('#accountLogout').hidden=true;humanCheck();status('Sign in with your existing test account.');return;}
   await service.user();$('#accountLogout').hidden=false;
   const assurance=await client.auth.mfa.getAuthenticatorAssuranceLevel();if(assurance.error)throw assurance.error;
-  mfaEnabled=assurance.data.nextLevel==='aal2';
+  mfaEnabled=assurance.data.nextLevel==='aal2';$('#setupAuthenticator').checked=mfaEnabled;$('#setupAuthenticator').disabled=mfaEnabled;
   if(assurance.data.currentLevel==='aal2'||assurance.data.nextLevel==='aal1'){
     const row=await service.load();if(current!==revision)return;
     if(row){savedRow=row;renderProfile(row);}else{show('profilePanel');status('Complete your profile. Authenticator setup is optional.');}
@@ -77,7 +77,7 @@ async function refresh(){
   $('#cancelMfa').hidden=true;show('mfaPanel');status(factorId?'Enter your authenticator code.':'Set up an authenticator to continue.');
 }
 function renderProfile(row){
-  savedRow=row;show('profileView');
+  savedRow=row;avatarData=row.avatar_data||'';show('profileView');$('#savedPhoto').hidden=!avatarData;if(avatarData)$('#savedPhoto').src=avatarData;
   $('#profileName').textContent=row.display_name;$('#profileUsername').textContent='@'+row.username;
   $('#profileDetails').replaceChildren();
   for(const [key,label] of Object.entries({headline:'Headline',profession:'Profession',location:'Location',skills:'Skills',looking_for:'Looking for',bio:'About you'})){
@@ -90,6 +90,7 @@ function renderProfile(row){
 }
 $('#editProfile').addEventListener('click',()=>{
   show('profilePanel');for(const el of $('#savedProfile').elements)if(el.name&&savedRow?.[el.name]!=null)el.value=savedRow[el.name];
+  $('#photoPreview').hidden=!avatarData;$('#photoPlaceholder').hidden=Boolean(avatarData);if(avatarData)$('#photoPreview').src=avatarData;$('#setupAuthenticator').checked=mfaEnabled;$('#setupAuthenticator').disabled=mfaEnabled;
   status('Edit your profile');$('#savedProfile').elements.username.focus();
 });
 $('#optionalMfa').addEventListener('click',()=>{
@@ -97,7 +98,7 @@ $('#optionalMfa').addEventListener('click',()=>{
 });
 $('#cancelMfa').addEventListener('click',()=>run(async()=>{
   if(factorId){const result=await client.auth.mfa.unenroll({factorId});if(result.error)throw result.error;}
-  await refresh();
+  if(finishSetup){location.assign('index.html#profile');return;}await refresh();
 }));
 async function run(work){
   if(busy)return;busy=true;const current=revision;
@@ -126,14 +127,34 @@ $('#mfaForm').addEventListener('submit',e=>{e.preventDefault();run(async()=>{
   if(!factorId)throw new Error('No factor');
   const code=String(new FormData(e.currentTarget).get('code')).trim();
   const result=await client.auth.mfa.challengeAndVerify({factorId,code});if(result.error)throw result.error;
-  await refresh();
+  if(finishSetup){location.assign('index.html#profile');return;}await refresh();
 });});
 $('#savedProfile').addEventListener('submit',e=>{e.preventDefault();run(async()=>{
-  const row=await service.save(Object.fromEntries(new FormData(e.currentTarget)));renderProfile(row);status('Profile saved.');
+  if(photoProcessing){status('Wait for your photo to finish loading.');return;}
+  if(!avatarData&&!savedRow){$('#photoError').textContent='Please add a profile picture.';$('#photoError').hidden=false;$('#photoInput').setAttribute('aria-invalid','true');$('#photoInput').focus();return;}
+  const addSecurity=$('#setupAuthenticator').checked&&!mfaEnabled;
+  const row=await service.save({...Object.fromEntries(new FormData(e.currentTarget)),avatar_data:avatarData});
+  if(addSecurity){savedRow=row;finishSetup=true;show('mfaPanel');$('#enrollButton').hidden=false;$('#cancelMfa').hidden=false;status('Profile saved. Set up your optional authenticator.');}
+  else location.assign('index.html#profile');
 });});
 $('#accountLogout').addEventListener('click',()=>run(async()=>{await service.signOut();clearPrivate();await refresh();}));
 client.auth.onAuthStateChange(event=>{if(event==='SIGNED_OUT'){
   revision++;clearPrivate();show('signinPanel');$('#accountLogout').hidden=true;status('Signed out.');humanCheck();
 }});
 const script=document.createElement('script');script.src='https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit';script.async=true;script.onload=humanCheck;script.onerror=()=>status('Human check could not load. Refresh and try again.');document.head.append(script);
-run(refresh);
+run(async()=>{await refresh();if(location.hash==='#register'&&!$('#signinPanel').hidden){show('registrationPanel');status('Registration is currently invite-only.');}});
+
+$('#showRegistration').addEventListener('click',()=>{show('registrationPanel');status('Registration is currently invite-only.');});
+$('#backToLogin').addEventListener('click',()=>{show('signinPanel');status('Sign in with your existing test account.');});
+$('#photoInput').addEventListener('change',async event=>{
+ const file=event.target.files[0];if(!file)return;photoProcessing=true;$('#photoError').hidden=true;
+ try{
+  if(!['image/jpeg','image/png','image/webp'].includes(file.type)||file.size>10*1024*1024)throw new Error('Choose a JPG, PNG or WebP picture under 10 MB.');
+  const bitmap=await createImageBitmap(file);const canvas=document.createElement('canvas');canvas.width=canvas.height=256;
+  const context=canvas.getContext('2d');context.fillStyle='#ffffff';context.fillRect(0,0,256,256);
+  const side=Math.min(bitmap.width,bitmap.height);context.drawImage(bitmap,(bitmap.width-side)/2,(bitmap.height-side)/2,side,side,0,0,256,256);bitmap.close();
+  const result=canvas.toDataURL('image/jpeg',0.82);if(result.length>100000)throw new Error('Choose a smaller picture.');
+  avatarData=result;$('#photoPreview').src=result;$('#photoPreview').hidden=false;$('#photoPlaceholder').hidden=true;$('#photoInput').removeAttribute('aria-invalid');
+ }catch(error){$('#photoError').textContent=error.message||'Could not read this picture. Try another file.';$('#photoError').hidden=false;}
+ finally{photoProcessing=false;}
+});

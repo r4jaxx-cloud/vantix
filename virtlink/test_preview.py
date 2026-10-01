@@ -31,6 +31,22 @@ class PreviewTests(unittest.TestCase):
   self.assertEqual(errors,[])
   page.screenshot(path=str(ROOT/'accounts-mobile-preview.png'),full_page=True)
   page.close()
+ def test_profile_photo_setup(self):
+  import base64
+  page=self.browser.new_page(viewport={'width':390,'height':844})
+  page.route('https://challenges.cloudflare.com/**',lambda route:route.fulfill(content_type='text/javascript',body='window.turnstile={render:()=>1,reset:()=>{}};'))
+  page.goto(self.url+'accounts.html');page.get_by_text('Sign in with your existing test account.',exact=True).wait_for()
+  page.evaluate("document.querySelector('#signinPanel').hidden=true;document.querySelector('#profilePanel').hidden=false")
+  page.locator('#photoInput').set_input_files({'name':'bad.svg','mimeType':'image/svg+xml','buffer':b'<svg></svg>'})
+  page.get_by_text('Choose a JPG, PNG or WebP picture under 10 MB.',exact=True).wait_for()
+  png=base64.b64decode('iVBORw0KGgoAAAANSUhEUgAAAAgAAAAICAIAAABLbSncAAAAFElEQVR4nGNkYPjPgA0wYRUdtBIAy0MBD1YkjLoAAAAASUVORK5CYII=')
+  page.locator('#photoInput').set_input_files({'name':'photo.png','mimeType':'image/png','buffer':png})
+  page.locator('#photoPreview').wait_for(state='visible')
+  self.assertTrue(page.locator('#photoPreview').get_attribute('src').startswith('data:image/jpeg;base64,'))
+  self.assertFalse(page.locator('#setupAuthenticator').is_checked())
+  page.locator('#setupAuthenticator').check();self.assertTrue(page.locator('#setupAuthenticator').is_checked())
+  self.assertFalse(page.evaluate('document.documentElement.scrollWidth > innerWidth'))
+  page.screenshot(path=str(ROOT/'profile-setup-mobile-preview.png'),full_page=True);page.close()
  def test_connected_profile(self):
   page=self.browser.new_page();errors=[]
   page.on('pageerror',lambda e:errors.append(str(e)))
@@ -73,15 +89,16 @@ class PreviewTests(unittest.TestCase):
   self.assertEqual(errors,[]);page.close()
  def test_preview(self):
   page=self.browser.new_page(viewport={'width':1440,'height':1000});errors=[]
+  page.route('https://challenges.cloudflare.com/**',lambda route:route.fulfill(content_type='text/javascript',body='window.turnstile={render:()=>1,reset:()=>{}};'))
   page.on('pageerror',lambda e:errors.append(str(e)))
   page.goto(self.url)
   page.locator('.heroCity').wait_for()
   self.assertTrue(page.locator('.heroCity').evaluate('(i)=>i.complete && i.naturalWidth>0'))
   page.screenshot(path=str(ROOT/'welcome-preview.png'),full_page=True)
   page.get_by_role('button',name='Sign Up',exact=True).click()
-  self.assertTrue(page.get_by_text('Public accounts are not open yet.',exact=False).is_visible())
-  self.assertEqual(page.locator('input[type=password]').count(),0)
-  page.get_by_role('button',name='Close dialog').click()
+  page.get_by_text('Your next chapter starts here.',exact=True).wait_for()
+  self.assertFalse(page.locator('input[type=password]').is_visible())
+  page.goto(self.url)
   for route in ['feed','network','jobs','communities','events','marketplace','messages','profile','saved','world','security','investors','terms','privacy','investor-policy','community-policy','menu']:
    page.goto(self.url+'#'+route)
    page.locator('main h1').wait_for()

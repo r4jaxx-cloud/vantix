@@ -49,3 +49,5 @@ Validation: backend/test_feed.sql uses rollback-only accounts to check member re
 
 ## Saved reactions
 Member likes and comments are persistent. Each user has at most one like per post and can remove their own likes/comments. The feed RPC uses SECURITY INVOKER with RLS, and returns counts plus the caller's liked state. Comment author identity is supplied by a server trigger. Comment reads show the latest 100 in chronological order. No realtime subscription, threaded replies or public moderation workflow yet. Database regression tests: test_reactions.sql.
+
+Account setup now includes a required photo for first-time UI onboarding and optional authenticator enrollment. Photos are cropped/re-encoded in-browser to 256px JPEG (up to 100KB) and stored in the owner-only profile row; original uploads are not retained. Existing profiles may keep initials. Saving navigates to the main profile, after optional authenticator setup if chosen. Public registration remains closed; the Create an account panel explains invite-only testing. Email delivery/recovery/new-device checks remain outstanding.
