@@ -44,3 +44,25 @@ window.addEventListener('virtlink-post-delete',async event=>{
   try{await feed.remove(event.detail);if(current===revision)await refreshFeed();}
   catch{if(current===revision)feedEvent({error:'Could not delete the post. Refresh and try again.'});}
 });
+
+const liking=new Set();let commentBusy=false,commentsRevision=0;
+function commentsEvent(detail){window.dispatchEvent(new CustomEvent('virtlink-comments',{detail}));}
+async function loadComments(postId,saved=false){const current=revision,request=++commentsRevision;try{const rows=await feed.comments(postId);if(current===revision&&request===commentsRevision)commentsEvent({postId,rows,saved});}catch{if(current===revision&&request===commentsRevision)commentsEvent({postId,error:'Could not load comments. Close and reopen to retry.'});}}
+window.addEventListener('virtlink-like',async event=>{
+ const {postId,liked}=event.detail;if(liking.has(postId))return;liking.add(postId);const current=revision;
+ try{await feed.like(postId,liked);if(current===revision)await refreshFeed();}
+ catch{if(current===revision)feedEvent({error:'Could not update your like. Try again.'});}
+ finally{liking.delete(postId);window.dispatchEvent(new CustomEvent('virtlink-like-done',{detail:postId}));}
+});
+window.addEventListener('virtlink-comments-load',event=>loadComments(event.detail));
+window.addEventListener('virtlink-comment-create',async event=>{
+ if(commentBusy)return;commentBusy=true;const current=revision,{postId,body}=event.detail;
+ try{await feed.comment(postId,body);if(current===revision){commentsEvent({postId,saved:true});await loadComments(postId);await refreshFeed();}}
+ catch(error){if(current===revision)commentsEvent({postId,error:error.code==='P0001'?'Commenting limit reached. Try again later.':'Could not confirm your comment. Close and reopen before retrying.'});}
+ finally{commentBusy=false;commentsEvent({postId,busy:false});}
+});
+window.addEventListener('virtlink-comment-delete',async event=>{
+ const current=revision,{id,postId}=event.detail;
+ try{await feed.removeComment(id);if(current===revision){await loadComments(postId);await refreshFeed();}}
+ catch{if(current===revision)commentsEvent({postId,error:'Could not delete your comment. Try again.'});}
+});
