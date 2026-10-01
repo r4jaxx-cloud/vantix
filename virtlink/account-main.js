@@ -66,3 +66,5 @@ window.addEventListener('virtlink-comment-delete',async event=>{
  try{await feed.removeComment(id);if(current===revision){await loadComments(postId);await refreshFeed();}}
  catch{if(current===revision)commentsEvent({postId,error:'Could not delete your comment. Try again.'});}
 });
+
+window.addEventListener('virtlink-account-refresh',refresh);
