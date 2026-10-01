@@ -49,7 +49,7 @@ for(const form of document.querySelectorAll('.accountShell form')){
 }
 
 let photoBitmap=null;
-let captchaToken='',widgetId=null,factorId=null,busy=false,revision=0,savedRow=null,mfaEnabled=false,avatarData='',photoProcessing=false,finishSetup=false;
+let captchaToken='',widgetId=null,factorId=null,busy=false,revision=0,savedRow=null,mfaEnabled=false,avatarData='',photoProcessing=false,finishSetup=false,goToProfile=false;
 function status(text){$('#accountStatus').textContent=text;}
 function show(panel){for(const id of ['signinPanel','mfaPanel','profilePanel','profileView','registrationPanel']) $('#'+id).hidden=id!==panel;}
 function clearPrivate(){if(photoBitmap){photoBitmap.close();photoBitmap=null;}$('#photoTools').hidden=true;$('#cancelProfileEdit').hidden=true;$('#profileEditorTitle').textContent='Create your profile';avatarData='';$('#photoError').hidden=true;$('#savedPhoto').removeAttribute('src');$('#savedPhoto').hidden=true;$('#photoPreview').removeAttribute('src');$('#photoPreview').hidden=true;$('#photoPlaceholder').hidden=false;savedRow=null;$('#profileName').textContent='';$('#profileUsername').textContent='';$('#profileDetails').replaceChildren();factorId=null;$('#savedProfile').reset();$('#mfaForm').reset();$('#mfaSecret').textContent='';$('#mfaQr').removeAttribute('src');$('#enrollDetails').hidden=true;$('#mfaForm').hidden=true;}
@@ -71,7 +71,7 @@ async function refresh(){
   mfaEnabled=assurance.data.nextLevel==='aal2';$('#setupAuthenticator').checked=mfaEnabled;$('#setupAuthenticator').disabled=mfaEnabled;
   if(assurance.data.currentLevel==='aal2'||assurance.data.nextLevel==='aal1'){
     const row=await service.load();if(current!==revision)return;
-    if(row){savedRow=row;renderProfile(row);if(inlineEdit)editSavedProfile();}else{show('profilePanel');status('Complete your profile. Authenticator setup is optional.');}
+    if(row){savedRow=row;if(goToProfile&&!inlineEdit){finishProfile();return;}renderProfile(row);if(inlineEdit)editSavedProfile();}else{show('profilePanel');status('Complete your profile. Authenticator setup is optional.');}
     return;
   }
   const factors=await client.auth.mfa.listFactors();if(factors.error)throw factors.error;
@@ -114,7 +114,7 @@ async function run(work){
 }
 $('#accountLogin').addEventListener('submit',e=>{e.preventDefault();run(async()=>{
   const form=e.currentTarget,data=new FormData(form);status('Signing in…');
-  try{await service.signIn(String(data.get('email')).trim(),String(data.get('password')),captchaToken);await refresh();}
+  try{await service.signIn(String(data.get('email')).trim(),String(data.get('password')),captchaToken);goToProfile=true;await refresh();}
   finally{form.elements.password.value='';resetCaptcha();}
 });});
 $('#enrollButton').addEventListener('click',()=>run(async()=>{
